@@ -2,7 +2,7 @@ use piston_window::PistonWindow;
 //		Import
 use wgpu::{
 	util::DeviceExt,
-	Device,
+	Device, Queue,
 };
 
 
@@ -90,10 +90,16 @@ pub struct FluidSimulation {
 
 	//		Extraneous data
 	device: Device,
+    queue: Queue,
 }
 
 impl FluidSimulation {
-	fn new(device: Device, initial_state: FluidInitialState, window: &mut PistonWindow) -> Self {
+	fn new(
+        device: Device, 
+        queue: Queue,
+        initial_state: FluidInitialState, 
+        window: &mut PistonWindow
+    ) -> Self {
 		//			Simulation
 		//		Create buffers
 		//	Basic data
@@ -281,16 +287,16 @@ impl FluidSimulation {
             label: Some("Settings Bind Group Layout"),
         });
         let settings_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("SimulationSettings Bind Group"),
             layout: &settings_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(settings_buffer.slice(..)),
+                resource: wgpu::BindingResource::Buffer(settings_buffer)
             }],
-            label: Some("SimulationSettings Bind Group"),
         });
 
         //      Pipelines
-        let layouts = &[&buffers_layout, &settings_layout]
+        let layouts = &[&buffers_layout, &settings_layout];
         
         let pipeline_update_pos = create_compute_helper(
             &device, layouts, &shader, 
@@ -351,7 +357,7 @@ impl FluidSimulation {
                 module: &render_shader,
                 entry_point: "main_fragment",
                 targets: &[Some( wgpu::ColorTargetState {
-                    format: frame.format(),
+                    format: wgpu::TextureFormat::Rgba8Unorm,
                     blend: Some(wgpu::BlendState::REPLACE), // Adjust blend state as needed
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -419,6 +425,7 @@ impl FluidSimulation {
 
 			//		Other data
             device,
+            queue,
         }
     }
 
@@ -477,32 +484,34 @@ impl FluidSimulation {
 
 	//		Render stuff
 	//	This function does a single render pass.
-    fn render_particles(&self, encoder: &mut wgpu::CommandEncoder, frame: &wgpu::TextureView) {
-        {
-			let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-				label: Some("Render Pass"),
-				color_attachments: &[Some( wgpu::RenderPassColorAttachment {
-					view: frame,
-					resolve_target: None,
-					ops: wgpu::Operations {
-						load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-						store: wgpu::StoreOp::Store,
-					},
-				})],
-				depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-			});
+    fn render_particles(
+        &self, 
+        encoder: &mut wgpu::CommandEncoder, 
+        frame: &wgpu::TextureView
+    ) {{
+        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("Render Pass"),
+            color_attachments: &[Some( wgpu::RenderPassColorAttachment {
+                view: frame,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                    store: wgpu::StoreOp::Store,
+                },
+            })],
+            depth_stencil_attachment: None,
+            occlusion_query_set: None,
+            timestamp_writes: None,
+        });
 
-			// Set pipeline and bind groups
-			render_pass.set_pipeline(&self.particle_render_pipeline);
-			render_pass.set_bind_group(0, &self.buffers_bind_group, &[]);
-			render_pass.set_bind_group(1, &self.settings_bind_group, &[]);
+        // Set pipeline and bind groups
+        render_pass.set_pipeline(&self.particle_render_pipeline);
+        render_pass.set_bind_group(0, &self.buffers_bind_group, &[]);
+        render_pass.set_bind_group(1, &self.settings_bind_group, &[]);
 
-			// Draw particles
-			render_pass.draw(0..self.num_particles, 0..1);
-		}
-    }
+        // Draw particles
+        render_pass.draw(0..self.num_particles, 0..1);
+	}}
 }
 
 //		Utilities
@@ -519,7 +528,7 @@ fn create_buffer<T: bytemuck::Pod>(
     })
 }
 
-fn create_buffer_zeros<T: bytemuck::Zeroable + Clone>(
+fn create_buffer_zeros<T: bytemuck::Pod + bytemuck::Zeroable + Clone>(
     device: &wgpu::Device,
     count: usize,
     label: &str,
