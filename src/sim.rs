@@ -15,8 +15,8 @@ const MAX_PARTICLES: usize = 2000000;
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct FluidInitialState {	//	SoA because this allows me to have seperate pos and vel buffers
-    pos: [Vector2<f32>; MAX_PARTICLES],
-    vel: [Vector2<f32>; MAX_PARTICLES],
+    pos: [f32; MAX_PARTICLES * 2],
+    vel: [f32; MAX_PARTICLES * 2],
 }
 
 #[repr(C)]
@@ -429,7 +429,7 @@ impl FluidSimulation {
 			label: Some("Compute Encoder") 
 		});
 		
-		let dispatch_size: usize = self.settings.max_particles / 16 as usize;
+		let dispatch_size: u32 = (self.settings.max_particles / 64) as u32;
 
 		//		Compute steps
         //	Update particle positions. This is the first thing we do.
@@ -460,9 +460,9 @@ impl FluidSimulation {
 
 	fn run_compute_pass(
 		&mut self,
-		encoder: wgpu::CommandEncoder,
+		mut encoder: wgpu::CommandEncoder,
 		pipeline: wgpu::ComputePipeline,
-		dispatch_size: usize,
+		dispatch_size: u32,
 	) {
 		{
 			let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { 
@@ -472,7 +472,7 @@ impl FluidSimulation {
 			cpass.set_pipeline(&pipeline);
 			cpass.set_bind_group(0, &self.buffers_bind_group, &[]);
 			cpass.set_bind_group(0, &self.settings_bind_group, &[]);
-			cpass.dispatch(dispatch_size, 1, 1);
+			cpass.dispatch_workgroups(dispatch_size, 1, 1);
 		}
 	}
 
