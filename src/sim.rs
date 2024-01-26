@@ -1,5 +1,6 @@
-use piston_window::PistonWindow;
+//use piston_window::PistonWindow;
 //		Import
+use winit::window::Window;
 use wgpu::{
 	util::DeviceExt,
 	Device, Queue,
@@ -98,7 +99,7 @@ impl FluidSimulation {
         device: Device, 
         queue: Queue,
         initial_state: FluidInitialState, 
-        window: &mut PistonWindow
+        window: &mut Window
     ) -> Self {
 		//			Simulation
 		//		Create buffers
