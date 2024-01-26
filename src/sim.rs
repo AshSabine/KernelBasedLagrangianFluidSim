@@ -6,7 +6,7 @@ use wgpu::{
 };
 
 
-use nalgebra::{Vector2, Point2};
+use nalgebra::{Vector2, Vector3};
 
 //      Data
 const MAX_PARTICLES: usize = 2000000;
@@ -107,12 +107,12 @@ impl FluidSimulation {
         let velocity_buffer = create_buffer(&device, &initial_state.vel, "Velocities Buffer");
 
         //  Other physics
-        let predicted_pos_buffer = create_buffer_zeros(&device, MAX_PARTICLES, "Predicted Positions Buffer");
-        let density_buffer = create_buffer_zeros(&device, MAX_PARTICLES, "Densities Buffer");
+        let predicted_pos_buffer = create_buffer_zeros::<Vector2<f32>>(&device, MAX_PARTICLES, "Predicted Positions Buffer");
+        let density_buffer = create_buffer_zeros::<Vector2<f32>>(&device, MAX_PARTICLES, "Densities Buffer");
 
         //  Spacial hashing stuff
-        let local_indices_buffer = create_buffer_zeros(&device, MAX_PARTICLES, "Local Indices Buffer");
-        let local_offsets_buffer = create_buffer_zeros(&device, MAX_PARTICLES, "Local Offsets Buffer");
+        let local_indices_buffer = create_buffer_zeros::<Vector3<u32>>(&device, MAX_PARTICLES, "Local Indices Buffer");
+        let local_offsets_buffer = create_buffer_zeros::<u32>(&device, MAX_PARTICLES, "Local Offsets Buffer");
 
         //  Settings
         let settings = Settings {
@@ -158,10 +158,9 @@ impl FluidSimulation {
                 //  Position
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStages::STORAGE,
+                    visibility: wgpu::ShaderStages::all(),
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                            dynamic: false,
                             read_only: false,
                         },
                         has_dynamic_offset: false,
@@ -172,10 +171,9 @@ impl FluidSimulation {
                 //  Velocity
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
-                    visibility: wgpu::ShaderStages::STORAGE,
+                    visibility: wgpu::ShaderStages::all(),
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                            dynamic: false,
                             read_only: false,
                         },
                         has_dynamic_offset: false,
@@ -186,10 +184,9 @@ impl FluidSimulation {
                 //  Predicted position
                 wgpu::BindGroupLayoutEntry {
                     binding: 3,
-                    visibility: wgpu::ShaderStages::STORAGE,
+                    visibility: wgpu::ShaderStages::all(),
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                            dynamic: true,
                             read_only: false,
                         },
                         has_dynamic_offset: false,
@@ -200,10 +197,9 @@ impl FluidSimulation {
                 //  Density
                 wgpu::BindGroupLayoutEntry {
                     binding: 4,
-                    visibility: wgpu::ShaderStages::STORAGE,
+                    visibility: wgpu::ShaderStages::all(),
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                            dynamic: true,
                             read_only: false,
                         },
                         has_dynamic_offset: false,
@@ -214,10 +210,9 @@ impl FluidSimulation {
                 //  Local indices
                 wgpu::BindGroupLayoutEntry {
                     binding: 5,
-                    visibility: wgpu::ShaderStages::STORAGE,
+                    visibility: wgpu::ShaderStages::all(),
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                            dynamic: true,
                             read_only: false,
                         },
                         has_dynamic_offset: false,
@@ -228,10 +223,9 @@ impl FluidSimulation {
                 //  Local offsets
                 wgpu::BindGroupLayoutEntry {
                     binding: 6,
-                    visibility: wgpu::ShaderStages::STORAGE,
+                    visibility: wgpu::ShaderStages::all(),
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Storage {
-                            dynamic: true,
                             read_only: false,
                         },
                         has_dynamic_offset: false,
@@ -276,7 +270,7 @@ impl FluidSimulation {
         let settings_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStages::UNIFORM,
+                visibility: wgpu::ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
                     ty: wgpu::BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -291,7 +285,7 @@ impl FluidSimulation {
             layout: &settings_layout,
             entries: &[wgpu::BindGroupEntry {
                 binding: 0,
-                resource: wgpu::BindingResource::Buffer(settings_buffer)
+                resource: settings_buffer.as_entire_binding()
             }],
         });
 
