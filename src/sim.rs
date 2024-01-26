@@ -9,14 +9,14 @@ use wgpu::{
 use nalgebra::{Vector2, Vector3};
 
 //      Data
-const MAX_PARTICLES: usize = 2000000;
+pub const MAX_PARTICLES: usize = 2000000;
 
 //		Structures
 #[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct FluidInitialState {	//	SoA because this allows me to have seperate pos and vel buffers
-    pos: [f32; MAX_PARTICLES * 2],
-    vel: [f32; MAX_PARTICLES * 2],
+#[derive(Clone, Debug)]
+pub struct FluidInitialState {	//	SoA because this allows me to have seperate pos and vel buffers
+    pub pos: Vec<Vector2<f32>>,
+    pub vel: Vec<Vector2<f32>>,
 }
 
 #[repr(C)]
@@ -94,7 +94,7 @@ pub struct FluidSimulation {
 }
 
 impl FluidSimulation {
-	fn new(
+	pub fn new(
         device: Device, 
         queue: Queue,
         initial_state: FluidInitialState, 
@@ -424,7 +424,7 @@ impl FluidSimulation {
     }
 
 	//		Compute stuff
-	fn compute(&mut self) {
+	pub fn compute(&mut self) {
 		let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { 
 			label: Some("Compute Encoder") 
 		});
@@ -478,7 +478,7 @@ impl FluidSimulation {
 
 	//		Render stuff
 	//	This function does a single render pass.
-    fn render_particles(
+    pub fn render_particles(
         &self, 
         encoder: &mut wgpu::CommandEncoder, 
         frame: &wgpu::TextureView
