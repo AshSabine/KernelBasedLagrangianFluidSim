@@ -3,7 +3,7 @@
 use winit::window::Window;
 use wgpu::{
 	util::DeviceExt,
-	Device, Queue,
+	Device
 };
 
 
@@ -88,32 +88,27 @@ pub struct FluidSimulation {
 	//		Rendering data
 	particle_render_shader: wgpu::ShaderModule,
     particle_render_pipeline: wgpu::RenderPipeline,
-
-	//		Extraneous data
-	device: Device,
-    queue: Queue,
 }
 
 impl FluidSimulation {
 	pub fn new(
-        device: Device, 
-        queue: Queue,
+        device: &Device, 
         initial_state: FluidInitialState, 
-        window: &mut Window
+        window: &Window
     ) -> Self {
 		//			Simulation
 		//		Create buffers
 		//	Basic data
-        let position_buffer = create_buffer(&device, &initial_state.pos, "Positions Buffer");
-        let velocity_buffer = create_buffer(&device, &initial_state.vel, "Velocities Buffer");
+        let position_buffer = create_buffer(device, &initial_state.pos, "Positions Buffer");
+        let velocity_buffer = create_buffer(device, &initial_state.vel, "Velocities Buffer");
 
         //  Other physics
-        let predicted_pos_buffer = create_buffer_zeros::<Vector2<f32>>(&device, MAX_PARTICLES, "Predicted Positions Buffer");
-        let density_buffer = create_buffer_zeros::<Vector2<f32>>(&device, MAX_PARTICLES, "Densities Buffer");
+        let predicted_pos_buffer = create_buffer_zeros::<Vector2<f32>>(device, MAX_PARTICLES, "Predicted Positions Buffer");
+        let density_buffer = create_buffer_zeros::<Vector2<f32>>(device, MAX_PARTICLES, "Densities Buffer");
 
         //  Spacial hashing stuff
-        let local_indices_buffer = create_buffer_zeros::<Vector3<u32>>(&device, MAX_PARTICLES, "Local Indices Buffer");
-        let local_offsets_buffer = create_buffer_zeros::<u32>(&device, MAX_PARTICLES, "Local Offsets Buffer");
+        let local_indices_buffer = create_buffer_zeros::<Vector3<u32>>(device, MAX_PARTICLES, "Local Indices Buffer");
+        let local_offsets_buffer = create_buffer_zeros::<u32>(device, MAX_PARTICLES, "Local Offsets Buffer");
 
         //  Settings
         let settings = Settings {
@@ -294,37 +289,37 @@ impl FluidSimulation {
         let layouts = &[&buffers_layout, &settings_layout];
         
         let pipeline_update_pos = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "UpdatePositionsCompute", "Update Pos Pipeline"
         );
 
         let pipeline_external_forces = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "ApplyExternalForcesCompute", "External Forces Pipeline"
         );
 
         let pipeline_predict_pos = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "UpdatePredictedPosCompute", "Predict Pos Pipeline"
         );
 
         let pipeline_update_locality = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "UpdateSpatialHashCompute", "Update Locality Pipeline"
         );
 
         let pipeline_update_density = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "UpdateDensityCompute", "Update Density Pipeline"
         );
 
         let pipeline_apply_pressure = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "ApplyPressureForceCompute", "Apply Pressure Pipeline"
         );
 
         let pipeline_apply_viscosity = create_compute_helper(
-            &device, layouts, &shader, 
+            device, layouts, &shader, 
             "ApplyViscosityForceCompute", "Apply Viscosity Pipeline"
         );
 
@@ -417,52 +412,43 @@ impl FluidSimulation {
 			//		Render data
 			particle_render_shader: render_shader,
 			particle_render_pipeline: render_pipeline,
-
-			//		Other data
-            device,
-            queue,
         }
     }
 
 	//		Compute stuff
-	pub fn compute(&mut self) {
-		let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { 
-			label: Some("Compute Encoder") 
-		});
-		
+	pub fn compute(
+        &mut self,
+        encoder: &mut wgpu::CommandEncoder
+    ) {
 		let dispatch_size: u32 = (self.settings.max_particles / 64) as u32;
 
 		//		Compute steps
         //	Update particle positions. This is the first thing we do.
-		self.run_compute_pass(encoder, self.pipeline_update_pos, dispatch_size);
+		self.run_compute_pass(encoder, &self.pipeline_update_pos, dispatch_size);
 
 		//	Apply external forces to the particles.
-		self.run_compute_pass(encoder, self.pipeline_external_forces, dispatch_size);		
+		self.run_compute_pass(encoder, &self.pipeline_external_forces, dispatch_size);		
 
 		//	Predict where the particles are going to be next frame.
-		self.run_compute_pass(encoder, self.pipeline_predict_pos, dispatch_size);
+		self.run_compute_pass(encoder, &self.pipeline_predict_pos, dispatch_size);
 
 		//	Update the spacial hash.
-		self.run_compute_pass(encoder, self.pipeline_update_locality, dispatch_size);
+		self.run_compute_pass(encoder, &self.pipeline_update_locality, dispatch_size);
 
 		//	Update all densities.
-		self.run_compute_pass(encoder, self.pipeline_update_density, dispatch_size);
+		self.run_compute_pass(encoder, &self.pipeline_update_density, dispatch_size);
 
 		//	Calculate pressure force
-		self.run_compute_pass(encoder, self.pipeline_apply_pressure, dispatch_size);
+		self.run_compute_pass(encoder, &self.pipeline_apply_pressure, dispatch_size);
 
 		//	Calculate viscosity force
-		self.run_compute_pass(encoder, self.pipeline_apply_viscosity, dispatch_size);
-
-		//		Finishing
-    	//	Submit the command encoder
-    	self.queue.submit(std::iter::once(encoder.finish()));
+		self.run_compute_pass(encoder, &self.pipeline_apply_viscosity, dispatch_size);
 	}
 
 	fn run_compute_pass(
-		&mut self,
-		mut encoder: wgpu::CommandEncoder,
-		pipeline: wgpu::ComputePipeline,
+		&self,
+		encoder: &mut wgpu::CommandEncoder,
+		pipeline: &wgpu::ComputePipeline,
 		dispatch_size: u32,
 	) {
 		{

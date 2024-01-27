@@ -55,14 +55,13 @@ pub async fn run() {
     };
     
     let mut fluid_simulation = FluidSimulation::new(
-        device,
-        queue,
+        &device,
         initial_state,
-        &mut window,
+        &window,
     );
 
 	//  Main loop
-    event_loop.run(move |event, target| 
+    if let Err(err) = event_loop.run(|event, target| 
         match event {
             Event::WindowEvent {
                 ref event,
@@ -77,20 +76,18 @@ pub async fn run() {
                     }, ..
                 } => target.exit(),
                 WindowEvent::RedrawRequested => {
-                    // Update simulation state
-                    fluid_simulation.compute();
-    
-                    // Render the simulation
                     let output = surface.get_current_texture().unwrap();
                     let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
-                    //*
                     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
                         label: Some("Render Encoder"),
-                    }); // */
-
+                    }); 
+                    
+                    //  Update sim + render
+                    fluid_simulation.compute(&mut encoder);
                     fluid_simulation.render_particles(&mut encoder, &view);
-    
+                    
+                    //  Submit to the queue
                     queue.submit(std::iter::once(encoder.finish()));
     
                     //  Request a redraw
@@ -101,24 +98,7 @@ pub async fn run() {
             
             _ => {}
         }
-    );
-
-    /* 
-    while let Some(e) = window.next() {
-        if let Some(args) = e.render_args() {
-            // Run the fluid simulation
-            fluid_simulation.compute();
-            
-            // Get the current frame
-            let output = surface.get_current_texture().unwrap();
-            let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-            // Render the particles
-            fluid_simulation.render_particles(
-                &mut encoder, 
-                &view
-            );
-        }
+    ) {
+        println!("error: {err:?}");
     }
-    */
 }
