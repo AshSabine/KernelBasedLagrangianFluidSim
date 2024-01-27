@@ -1,16 +1,16 @@
 //	Vertex input
 struct VertexInput {
-    @location(0) position: vec2<f32>;
+    @location(0) position: vec2<f32>,
 };
 
 //	Output from vertex shader to fragment shader
 struct	VertexOutput {
-    @builtin(position) position: vec4<f32>;
+    @builtin(position) position: vec4<f32>,
 };
 
 //	Fragment shader input
 struct FragmentInput {
-    @builtin(position) position: vec4<f32>;
+    @builtin(position) position: vec4<f32>,
 };
 
 //	Main vertex shader function
