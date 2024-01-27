@@ -170,7 +170,7 @@ fn UpdatePredictedPosCompute(
 
 //	Local coordinate hashing
 @compute @workgroup_size(64)
-fn UpdatelocalHashCompute(
+fn UpdateLocalHashCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >= settings.num_particles) {

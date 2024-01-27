@@ -142,7 +142,7 @@ impl FluidSimulation {
         let settings_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Settings Buffer"),
             contents: bytemuck::cast_slice(&[settings]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
         });
 
         //      Shader modules
@@ -268,7 +268,7 @@ impl FluidSimulation {
                 binding: 0,
                 visibility: wgpu::ShaderStages::all(),
                 ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
                     has_dynamic_offset: false,
                     min_binding_size: None,
                 },
@@ -305,7 +305,7 @@ impl FluidSimulation {
 
         let pipeline_update_locality = create_compute_helper(
             device, layouts, &shader, 
-            "UpdateSpatialHashCompute", "Update Locality Pipeline"
+            "UpdateLocalHashCompute", "Update Locality Pipeline"
         );
 
         let pipeline_update_density = create_compute_helper(
@@ -476,7 +476,7 @@ impl FluidSimulation {
                 view,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
                     store: wgpu::StoreOp::Store,
                 },
             })],
