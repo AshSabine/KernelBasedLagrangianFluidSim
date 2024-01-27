@@ -1,16 +1,16 @@
 //		Initialization
 //	Buffers to read/write
-struct FluidBuffers {
-	position: array<vec2<f32>>,
-	velocity: array<vec2<f32>>,
-
-	predicted_pos: array<vec2<f32>>,
-
-	density: array<vec2<f32>>,
-
-	indices: array<vec3<u32>>,
-	offsets: array<u32>,
-}
+//struct FluidBuffers {
+//	position: array<vec2<f32>>,
+//	velocity: array<vec2<f32>>,
+//
+//	predicted_pos: array<vec2<f32>>,
+//
+//	density: array<vec2<f32>>,
+//
+//	indices: array<vec3<u32>>,
+//	offsets: array<u32>,
+//}
 
 //	Settings
 struct SimulationSettings {
@@ -43,11 +43,11 @@ struct SimulationSettings {
 }
 
 //	Data
-var<storage> HASH_KEYS: array<u32> = array<u32>(
+var<private> HASH_KEYS: array<u32, 3> = array<u32, 3>(
 	2938, 9537247, 4281573253
 );
 
-var<storage> OFFSETS_2D: array<vec2<i32>> = array<vec2<i32>>(
+var<private> OFFSETS_2D: array<vec2<i32>, 9> = array<vec2<i32>, 9>(
 	vec2<i32>(-1, -1),
 	vec2<i32>( 0, -1),
 	vec2<i32>( 1, -1),
@@ -60,15 +60,15 @@ var<storage> OFFSETS_2D: array<vec2<i32>> = array<vec2<i32>>(
 );
 
 //	Bind groups
-var<storage, read_write> fluidBuffers: FluidBuffers;
+//var<storage, read_write> fluidBuffers: FluidBuffers;
 
 //Bind the buffers
-@group(0) @binding(1) var<storage, read_write> positions: array<vec2<f32>>; // = fluidBuffers.positions;
-@group(0) @binding(2) var<storage, read_write> velocities: array<vec2<f32>>; // = fluidBuffers.velocities;
-@group(0) @binding(3) var<storage, read_write> predictedPos: array<vec2<f32>>; // = fluidBuffers.predictedPos;
-@group(0) @binding(4) var<storage, read_write> densities: array<vec2<f32>>; // = fluidBuffers.densities;
-@group(0) @binding(5) var<storage, read_write> localIndices: array<vec3<u32>>; // = fluidBuffers.localIndices;
-@group(0) @binding(6) var<storage, read_write> localOffsets: array<u32>; // = fluidBuffers.localOffsets;
+@group(0) @binding(0) var<storage, read_write> positions: array<vec2<f32>>; // = fluidBuffers.positions;
+@group(0) @binding(1) var<storage, read_write> velocities: array<vec2<f32>>; // = fluidBuffers.velocities;
+@group(0) @binding(2) var<storage, read_write> predictedPos: array<vec2<f32>>; // = fluidBuffers.predictedPos;
+@group(0) @binding(3) var<storage, read_write> densities: array<vec2<f32>>; // = fluidBuffers.densities;
+@group(0) @binding(4) var<storage, read_write> localIndices: array<vec3<u32>>; // = fluidBuffers.localIndices;
+@group(0) @binding(5) var<storage, read_write> localOffsets: array<u32>; // = fluidBuffers.localOffsets;
 
 //Bind the settings
 @group(1) @binding(0) var<storage, read> settings: SimulationSettings;
@@ -110,20 +110,18 @@ fn HandleCollisions(
     let obstacle_dist = obstacle_half - abs(pos -  settings.obstacle_pos);
 
     if obstacle_dist.x >= 0. && obstacle_dist.y >= 0. {
-        //	Match doesn't exist in wgsl
-		var axis = 0;
-		var offset = 0;
-
+        //	Match doesn't exist in wgsl & I can't slice vectors
         if obstacle_dist.x < obstacle_dist.y {
-			axis = 0;
-			offset = settings.obstacle_pos.x;
-		} else if obstacle_dist.x >= obstacle_dist.y {
-			axis = 1;
-			offset = settings.obstacle_pos.y;
-		}
+			let offset: f32 = settings.obstacle_pos.x;
 
-        pos[axis] = obstacle_half[axis] * sign(pos[axis] - offset) + offset;
-        vel[axis] *= -1. *  settings.collision_damping;
+			pos.x = obstacle_half.x * sign(pos.x - offset) + offset;
+        	vel.x *= -1. *  settings.collision_damping;
+		} else if obstacle_dist.x >= obstacle_dist.y {
+			let offset: f32 = settings.obstacle_pos.y;
+
+			pos.y = obstacle_half.y * sign(pos.y - offset) + offset;
+        	vel.y *= -1. *  settings.collision_damping;
+		}
     }
 
     //	Now update pos & vel
@@ -197,7 +195,7 @@ fn Pos2Indices(position: vec2<f32>, radius: f32) -> vec2<i32> {
 
 //Integer coordinates to hash value
 fn Indices2Hash(indices: vec2<i32>) -> u32 {
-    let bitshift: u32 = u32(32 / length(indices));
+    let bitshift: u32 = u32(32 / 2);
 
     // Map indices to u32
     let indices_unsigned = vec2<u32>(indices);
@@ -236,7 +234,7 @@ fn CalculateDensity(
 	//	Neighbor search - loop across local indices
 	let originIndices: vec2<i32> = Pos2Indices(position, settings.smoothing_radius);
 
-	let density: vec2<f32> = vec2<f32>(0.0, 0.0);
+	var density: vec2<f32> = vec2<f32>(0.0, 0.0);
 	for (var j: i32 = 0; j < 9; j = j + 1) {
 		//	Find neighbor hash
 		let hash: u32 = Indices2Hash(originIndices + OFFSETS_2D[j]);
@@ -343,10 +341,10 @@ fn CalculatePressure(
 	//	Neighbor search - loop across local indices
 	let originIndices: vec2<i32> = Pos2Indices(position, settings.smoothing_radius);
 
-	let pressureForce: vec2<f32> = vec2<f32>(0.0, 0.0);
+	var pressureForce: vec2<f32> = vec2<f32>(0.0, 0.0);
 	for (var j: i32 = 0; j < 9; j = j + 1) {
 		//	Find neighbor hash
-		let hash: u32 = indicesToHash(originIndices + OFFSETS_2D[j]);
+		let hash: u32 = Indices2Hash(originIndices + OFFSETS_2D[j]);
 		let key: u32 = hash % settings.max_particles;
 
 		var k: u32 = localOffsets[key];
@@ -372,8 +370,8 @@ fn CalculatePressure(
 			}
 
 			//		Calculation
-			//	Get vec2 from the predictedPositions buffer
-			let neighborPos: vec2<f32> = predictedPositions[neighborIndex];
+			//	Get vec2 from the predictedPos buffer
+			let neighborPos: vec2<f32> = predictedPos[neighborIndex];
 
 			//	Calculate distance
 			let neighborOffset: vec2<f32> = neighborPos - position;
@@ -386,7 +384,7 @@ fn CalculatePressure(
 
 			//	Calculate pressure
 			let distance: f32 = sqrt(neighborSqrDist);
-			let neighborDir: vec2<f32> = vec2<f32>(0.0, 0.0);
+			var neighborDir: vec2<f32> = vec2<f32>(0.0, 0.0);
 			if (distance > 0.) {
 				neighborDir = neighborOffset / distance;
 			}
@@ -401,12 +399,12 @@ fn CalculatePressure(
 			let sharedPressureNear: f32 = (pressureNear + neighborPressureNear) * 0.5;
 
 			pressureForce += neighborDir
-				* densityDerivative(distance, settings.smoothing_radius)
+				* DensityDerivative(distance, settings.smoothing_radius)
 				* sharedPressure
 				/ neighborDensity;
 
 			pressureForce += neighborDir
-				* nearDensityDerivative(distance, settings.smoothing_radius)
+				* DensityDerivativeNear(distance, settings.smoothing_radius)
 				* sharedPressureNear
 				/ neighborDensityNear;
 		}
@@ -469,7 +467,7 @@ fn CalculateViscosity(
 	// Neighbor search - loop across local indices
 	let originIndices: vec2<i32> = Pos2Indices(position, settings.smoothing_radius);
 
-	let viscosityForce: vec2<f32> = vec2<f32>(0.0, 0.0);
+	var viscosityForce: vec2<f32> = vec2<f32>(0.0, 0.0);
 	for (var j: i32 = 0; j < 9; j = j + 1) {
 		//	Find neighbor hash
 		let hash: u32 = Indices2Hash(originIndices + OFFSETS_2D[j]);
@@ -493,7 +491,7 @@ fn CalculateViscosity(
 
 			//		Calculation
 			//	Get vec2 from the predictedPositions buffer
-			let neighborPos: vec2<f32> = predictedPositions[neighborIndex];
+			let neighborPos: vec2<f32> = predictedPos[neighborIndex];
 
 			//	Calculate distance
 			let neighborOffset: vec2<f32> = neighborPos - position;
@@ -517,3 +515,40 @@ fn CalculateViscosity(
 }
 
 //		Kernels
+//	Internal
+fn DensityKernel(d: f32, r: f32) -> f32 { return Spike2(d, r); }
+fn NearDensityKernel(d: f32, r: f32) -> f32 { return Spike3(d, r); }
+fn DensityDerivative(d: f32, r: f32) -> f32 { return Derivative2(d, r); }
+fn DensityDerivativeNear(d: f32, r: f32) -> f32 { return Derivative3(d, r); }
+fn ViscosityKernel(d: f32, r: f32 ) -> f32 { return Spike2(d, r); }
+
+//	Math
+fn Spike3(d: f32, r: f32) -> f32 {
+	if (d < r) {
+		let v: f32 = r - d;
+		return v * v * v * 0.5;
+	} return 0.;
+}
+
+fn Spike2(d: f32, r: f32) -> f32 {
+	if (d < r) {
+		let v: f32 = r - d;
+		return v * v * v * 0.5;
+	} return 0.;
+}
+
+fn Derivative3(d: f32, r: f32) -> f32 {
+	if (d <= r) {
+		let v: f32 = r - d;
+		return -v * v * 0.5;
+	}
+	return 0.;
+}
+
+fn Derivative2(d: f32, r: f32) -> f32 {
+	if (d <= r) {
+		let v: f32 = r - d;
+		return -v * 0.5;
+	}
+	return 0.;
+}
