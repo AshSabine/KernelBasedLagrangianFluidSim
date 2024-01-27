@@ -1,81 +1,67 @@
 //		Initialization
 //	Buffers to read/write
-[[block]]
 struct FluidState {
-	position: array<vec2<f32>>;
-	velocity: array<vec2<f32>>;
+	position: array<vec2<f32>>,
+	velocity: array<vec2<f32>>,
 
-	predicted_pos: array<vec2<f32>>;
+	predicted_pos: array<vec2<f32>>,
 
-	density: array<vec2<f32>>;
+	density: array<vec2<f32>>,
 
-	indices: array<uvec3>;
-	offsets: array<u32>;
+	indices: array<uvec3>,
+	offsets: array<u32>,
 }
 
 //	Settings
-[[block]]
 struct SimulationSettings {
 	//		Particle tracking
-	num_particles: u32;
-	max_particles: u32;
+	num_particles: u32,
+	max_particles: u32,
 
 	//		Timekeeping	
-	dT: f32;
+	dT: f32,
 
 	//		Physics
-	gravity: f32;
+	gravity: f32,
 
-	prediction_factor: f32;
+	prediction_factor: f32,
 
-	smoothing_radius: f32;
-	target_density: f32;
+	smoothing_radius: f32,
+	target_density: f32,
     
-	pressure_multiplier: f32;
-    pressure_multiplier_near: f32;
+	pressure_multiplier: f32,
+    pressure_multiplier_near: f32,
 
-    viscosity_strength: f32;
+    viscosity_strength: f32,
 
 	//		Bounds & obstacles
-	bounds_size: vec2<f32>;
-    obstacle_size: vec2<f32>;
-    obstacle_pos: vec2<f32>;
+	bounds_size: vec2<f32>,
+    obstacle_size: vec2<f32>,
+    obstacle_pos: vec2<f32>,
 
-	collision_damping: f32;
+	collision_damping: f32,
 }
 
 //	Bind groups
 var<storage, read_write> fluidBuffers: FluidBuffers;
 
 //Bind the buffers
-[[binding(1), group(0)]]
-var<storage, read_write> positions: array<vec2<f32>> @fluidBuffers.positions;
-
-[[binding(2), group(0)]]
-var<storage, read_write> velocities: array<vec2<f32>> @fluidBuffers.velocities;
-
-[[binding(3), group(0)]]
-var<storage, read_write> predictedPos: array<vec2<f32>> @fluidBuffers.predictedPos;
-
-[[binding(4), group(0)]]
-var<storage, read_write> densities: array<vec2<f32>> @fluidBuffers.densities;
-
-[[binding(5), group(0)]]
-var<storage, read_write> spatialIndices: array<uvec3> @fluidBuffers.spatialIndices;
-
-[[binding(6), group(0)]]
-var<storage, read_write> spatialOffsets: array<u32> @fluidBuffers.spatialOffsets;
+@group(0) @binding(1) var<storage, read_write> positions: array<vec2<f32>> = fluidBuffers.positions;
+@group(0) @binding(2) var<storage, read_write> velocities: array<vec2<f32>> = fluidBuffers.velocities;
+@group(0) @binding(3) var<storage, read_write> predictedPos: array<vec2<f32>> = fluidBuffers.predictedPos;
+@group(0) @binding(4) var<storage, read_write> densities: array<vec2<f32>> = fluidBuffers.densities;
+@group(0) @binding(5) var<storage, read_write> spatialIndices: array<uvec3> = fluidBuffers.spatialIndices;
+@group(0) @binding(6) var<storage, read_write> spatialOffsets: array<u32> = fluidBuffers.spatialOffsets;
 
 //Bind the settings
-[[binding(0), group(1)]]
-var<storage, read> settings: SimulationSettings;
+@group(1) @binding(0) var<storage, read> settings: SimulationSettings;
 
 
 //		Define compute shaders
 //	Position updating + collision handling
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn UpdatePositionsCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >=  settings.num_particles) {
         return;
@@ -89,8 +75,8 @@ fn HandleCollisions(
 	i: u32,
 ) {
 	//	Slice buffer data
-    let mut pos = positions[i];
-    let mut vel = velocities[i];
+    let pos = positions[i];
+    let vel = velocities[i];
 
     //	Collide against bounds
     let bounds_half: vec2<f32> =  settings.bounds_size * 0.5;
@@ -109,11 +95,13 @@ fn HandleCollisions(
 
     if obstacle_dist.x >= 0. && obstacle_dist.y >= 0. {
         //	Determine the axis and offset using match
-        let (axis, offset): (i32, f32) = match (obstacle_dist.x < obstacle_dist.y, obstacle_dist.x >= obstacle_dist.y) {
-            (true, _) => (0,  settings.obstacle_pos.x),
-            (_, true) => (1,  settings.obstacle_pos.y),
-            _ => unreachable!(),
-        };
+        if obstacle_dist.x < obstacle_dist.y {
+			axis = 0;
+			offset = settings.obstacle_pos.x;
+		} else if obstacle_dist.x >= obstacle_dist.y {
+			axis = 1;
+			offset = settings.obstacle_pos.y;
+		}
 
         pos[axis] = obstacle_half[axis] * (pos[axis] - offset).signum() + offset;
         vel[axis] *= -1. *  settings.collision_damping;
@@ -125,9 +113,9 @@ fn HandleCollisions(
 }
 
 //	External force handling
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn ApplyExternalForcesCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >=  settings.num_particles) {
         return;
@@ -146,9 +134,9 @@ fn ApplyExternalForcesCompute(
 }
 
 //	Prediction handling
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn UpdatePredictedPosCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >=  settings.num_particles) {
         return;
@@ -164,9 +152,9 @@ fn UpdatePredictedPosCompute(
 
 
 //	Local coordinate hashing
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn UpdateSpatialHashCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >= settings.num_particles) {
         return;
@@ -185,7 +173,7 @@ fn UpdateSpatialHashCompute(
 
 //Position to integer coordinates
 fn Pos2Indices(position: vec2<f32>, radius: f32) -> vec2<i32> {
-    return (position / radius).map<f32, i32>(floor);
+    return vec2<i32>(position / radius);
 }
 
 //Integer coordinates to hash value
@@ -193,7 +181,7 @@ fn Indices2Hash(indices: vec2<i32>) -> u32 {
     let bitshift: u32 = 32 / indices.length();
 
     // Map indices to u32
-    indices = indices.map<i32, u32>(cast);
+    indices = uvec3(indices);
 
     // Hash
     var hash: u32 = 0;
@@ -206,9 +194,9 @@ fn Indices2Hash(indices: vec2<i32>) -> u32 {
 }
 
 //	Density computation
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn UpdateDensityCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >= settings.num_particles) {
         return;
@@ -275,9 +263,9 @@ fn CalculateDensity(
 }
 
 //	Pressure calculation
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn ApplyPressureForceCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >= settings.num_particles) {
         return;
@@ -379,7 +367,10 @@ fn CalculatePressure(
 
 			//	Calculate pressure
 			let distance: f32 = sqrt(neighborSqrDist);
-			let neighborDir: vec2<f32> = distance > 0.0 ? neighborOffset / distance : vec2<f32>(0.0, 0.0);
+			let neighborDir: vec2<f32> = vec2<f32>(0.0, 0.0)
+			if (distance > 0.) {
+				neighborDir = neighborOffset / distance;
+			}
 
 			let neighborDensity: f32 = densities[neighborIndex][0];
 			let neighborDensityNear: f32 = densities[neighborIndex][1];
@@ -407,9 +398,9 @@ fn CalculatePressure(
 }
 
 //	Viscosity calculation
-[[stage(compute), workgroup_size(64, 1, 1)]]
+@compute @workgroup_size(64)
 fn ApplyViscosityForceCompute(
-	[[builtin(global_invocation_id)]] id: vec3<u32>
+	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >= settings.num_particles) {
         return;
