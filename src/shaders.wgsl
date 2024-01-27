@@ -1,6 +1,6 @@
 //		Initialization
 //	Buffers to read/write
-struct FluidState {
+struct FluidBuffers {
 	position: array<vec2<f32>>,
 	velocity: array<vec2<f32>>,
 
@@ -8,7 +8,7 @@ struct FluidState {
 
 	density: array<vec2<f32>>,
 
-	indices: array<uvec3>,
+	indices: array<vec3<u32>>,
 	offsets: array<u32>,
 }
 
@@ -42,20 +42,36 @@ struct SimulationSettings {
 	collision_damping: f32,
 }
 
+//	Data
+var<storage> HASH_KEYS: array<u32> = array<u32>(
+	2938, 9537247, 4281573253
+);
+
+var<storage> OFFSETS_2D: array<vec2<i32>> = array<vec2<i32>>(
+	vec2<i32>(-1, -1),
+	vec2<i32>( 0, -1),
+	vec2<i32>( 1, -1),
+	vec2<i32>(-1,  0),
+	vec2<i32>( 0,  0),
+	vec2<i32>( 1,  0),
+	vec2<i32>(-1,  1),
+	vec2<i32>( 0,  1),
+	vec2<i32>( 1,  1),
+);
+
 //	Bind groups
 var<storage, read_write> fluidBuffers: FluidBuffers;
 
 //Bind the buffers
-@group(0) @binding(1) var<storage, read_write> positions: array<vec2<f32>> = fluidBuffers.positions;
-@group(0) @binding(2) var<storage, read_write> velocities: array<vec2<f32>> = fluidBuffers.velocities;
-@group(0) @binding(3) var<storage, read_write> predictedPos: array<vec2<f32>> = fluidBuffers.predictedPos;
-@group(0) @binding(4) var<storage, read_write> densities: array<vec2<f32>> = fluidBuffers.densities;
-@group(0) @binding(5) var<storage, read_write> spatialIndices: array<uvec3> = fluidBuffers.spatialIndices;
-@group(0) @binding(6) var<storage, read_write> spatialOffsets: array<u32> = fluidBuffers.spatialOffsets;
+@group(0) @binding(1) var<storage, read_write> positions: array<vec2<f32>>; // = fluidBuffers.positions;
+@group(0) @binding(2) var<storage, read_write> velocities: array<vec2<f32>>; // = fluidBuffers.velocities;
+@group(0) @binding(3) var<storage, read_write> predictedPos: array<vec2<f32>>; // = fluidBuffers.predictedPos;
+@group(0) @binding(4) var<storage, read_write> densities: array<vec2<f32>>; // = fluidBuffers.densities;
+@group(0) @binding(5) var<storage, read_write> localIndices: array<vec3<u32>>; // = fluidBuffers.localIndices;
+@group(0) @binding(6) var<storage, read_write> localOffsets: array<u32>; // = fluidBuffers.localOffsets;
 
 //Bind the settings
 @group(1) @binding(0) var<storage, read> settings: SimulationSettings;
-
 
 //		Define compute shaders
 //	Position updating + collision handling
@@ -75,8 +91,8 @@ fn HandleCollisions(
 	i: u32,
 ) {
 	//	Slice buffer data
-    let pos = positions[i];
-    let vel = velocities[i];
+    var pos = positions[i];
+    var vel = velocities[i];
 
     //	Collide against bounds
     let bounds_half: vec2<f32> =  settings.bounds_size * 0.5;
@@ -91,10 +107,13 @@ fn HandleCollisions(
 
     //	Collide against obstacle
     let obstacle_half =  settings.obstacle_size * 0.5;
-    let obstacle_dist = obstacle_half - (pos -  settings.obstacle_pos).abs();
+    let obstacle_dist = obstacle_half - abs(pos -  settings.obstacle_pos);
 
     if obstacle_dist.x >= 0. && obstacle_dist.y >= 0. {
-        //	Determine the axis and offset using match
+        //	Match doesn't exist in wgsl
+		var axis = 0;
+		var offset = 0;
+
         if obstacle_dist.x < obstacle_dist.y {
 			axis = 0;
 			offset = settings.obstacle_pos.x;
@@ -103,7 +122,7 @@ fn HandleCollisions(
 			offset = settings.obstacle_pos.y;
 		}
 
-        pos[axis] = obstacle_half[axis] * (pos[axis] - offset).signum() + offset;
+        pos[axis] = obstacle_half[axis] * sign(pos[axis] - offset) + offset;
         vel[axis] *= -1. *  settings.collision_damping;
     }
 
@@ -122,7 +141,7 @@ fn ApplyExternalForcesCompute(
     }
 
 	//	Slice data
-	var pos: vec2<f32> = positions[id.x];
+	let pos: vec2<f32> = positions[id.x];
 	var vel: vec2<f32> = velocities[id.x];
 
 	//	Apply gravity
@@ -143,17 +162,17 @@ fn UpdatePredictedPosCompute(
     }
 
 	//	Slice data
-	var pos: vec2<f32> = positions[id.x];
-	var vel: vec2<f32> = velocities[id.x];
+	let pos: vec2<f32> = positions[id.x];
+	let vel: vec2<f32> = velocities[id.x];
 
     //	Predict
-    predictedPos[id.x] = positions.position[id.x] + velocities.velocity[id.x] *  settings.prediction_factor;
+    predictedPos[id.x] = positions[id.x] + velocities[id.x] *  settings.prediction_factor;
 }
 
 
 //	Local coordinate hashing
 @compute @workgroup_size(64)
-fn UpdateSpatialHashCompute(
+fn UpdatelocalHashCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
     if (id.x >= settings.num_particles) {
@@ -161,14 +180,14 @@ fn UpdateSpatialHashCompute(
     }
 
     //	Reset offsets
-    spatialOffsets[id.x] = settings.num_particles;
+    localOffsets[id.x] = settings.num_particles;
 
     //	Update index buffer
     let indices: vec2<i32> = Pos2Indices(predictedPos[id.x], settings.smoothing_radius);
     let hash: u32 = Indices2Hash(indices);
     let key: u32 = hash % settings.max_particles;
     
-	spatialIndices[id.x] = uvec3(index, hash, key);
+	localIndices[id.x] = vec3<u32>(id.x, hash, key);
 }
 
 //Position to integer coordinates
@@ -178,15 +197,15 @@ fn Pos2Indices(position: vec2<f32>, radius: f32) -> vec2<i32> {
 
 //Integer coordinates to hash value
 fn Indices2Hash(indices: vec2<i32>) -> u32 {
-    let bitshift: u32 = 32 / indices.length();
+    let bitshift: u32 = u32(32 / length(indices));
 
     // Map indices to u32
-    indices = uvec3(indices);
+    let indices_unsigned = vec2<u32>(indices);
 
     // Hash
     var hash: u32 = 0;
-    for (var i: u32 = 0; i < indices.length(); i = i + 1) {
-        var shifted: u32 = indices[i] << (i * bitshift);
+    for (var i: u32 = 0; i < 3; i = i + 1) {
+        let shifted: u32 = indices_unsigned[i] << (i * bitshift);
         hash = hash ^ (shifted * HASH_KEYS[i]);
     }
 
@@ -209,7 +228,7 @@ fn CalculateDensity(
 	i: u32,
 ) -> vec2<f32> {
 	//	Retrieve position
-	let pos: vec2<f32> = predictedPos[i];
+	let position: vec2<f32> = predictedPos[i];
 
 	//	Precalculation
 	let sqrRadius: f32 = settings.smoothing_radius * settings.smoothing_radius;
@@ -217,7 +236,7 @@ fn CalculateDensity(
 	//	Neighbor search - loop across local indices
 	let originIndices: vec2<i32> = Pos2Indices(position, settings.smoothing_radius);
 
-	var density: vec2<f32> = vec2<f32>(0.0, 0.0);
+	let density: vec2<f32> = vec2<f32>(0.0, 0.0);
 	for (var j: i32 = 0; j < 9; j = j + 1) {
 		//	Find neighbor hash
 		let hash: u32 = Indices2Hash(originIndices + OFFSETS_2D[j]);
@@ -225,7 +244,7 @@ fn CalculateDensity(
 
 		var k: u32 = localOffsets[key];
 		while (k < settings.num_particles) {
-			let indexData: uvec3 = localIndices[k];
+			let indexData: vec3<u32> = localIndices[k];
 			k = k + 1;
 
 			//		Conditional checks
@@ -324,15 +343,15 @@ fn CalculatePressure(
 	//	Neighbor search - loop across local indices
 	let originIndices: vec2<i32> = Pos2Indices(position, settings.smoothing_radius);
 
-	var pressureForce: vec2<f32> = vec2<f32>(0.0, 0.0);
+	let pressureForce: vec2<f32> = vec2<f32>(0.0, 0.0);
 	for (var j: i32 = 0; j < 9; j = j + 1) {
 		//	Find neighbor hash
 		let hash: u32 = indicesToHash(originIndices + OFFSETS_2D[j]);
-		let key: u32 = hash % settings.max_particles
+		let key: u32 = hash % settings.max_particles;
 
 		var k: u32 = localOffsets[key];
 		while (k < settings.num_particles) {
-			let indexData: uvec3 = localIndices[k];
+			let indexData: vec3<u32> = localIndices[k];
 			k = k + 1;
 
 			//		Conditional checks
@@ -367,7 +386,7 @@ fn CalculatePressure(
 
 			//	Calculate pressure
 			let distance: f32 = sqrt(neighborSqrDist);
-			let neighborDir: vec2<f32> = vec2<f32>(0.0, 0.0)
+			let neighborDir: vec2<f32> = vec2<f32>(0.0, 0.0);
 			if (distance > 0.) {
 				neighborDir = neighborOffset / distance;
 			}
@@ -450,15 +469,15 @@ fn CalculateViscosity(
 	// Neighbor search - loop across local indices
 	let originIndices: vec2<i32> = Pos2Indices(position, settings.smoothing_radius);
 
-	var viscosityForce: vec2<f32> = vec2<f32>(0.0, 0.0);
+	let viscosityForce: vec2<f32> = vec2<f32>(0.0, 0.0);
 	for (var j: i32 = 0; j < 9; j = j + 1) {
 		//	Find neighbor hash
 		let hash: u32 = Indices2Hash(originIndices + OFFSETS_2D[j]);
 		let key: u32 = hash % settings.max_particles;
 
-		var k: u32 = spatialOffsets[key];
+		var k: u32 = localOffsets[key];
 		while (k < settings.num_particles) {
-			let indexData: uvec3 = spatialIndices[k];
+			let indexData: vec3<u32> = localIndices[k];
 			k = k + 1;
 
 			//		Conditional checks
@@ -489,7 +508,7 @@ fn CalculateViscosity(
 			let distance: f32 = sqrt(neighborSqrDist);
 
 			let neighborVelocity: vec2<f32> = velocities[neighborIndex];
-			viscosityForce += (neighborVelocity - velocity) * viscosityKernel(distance, settings.smoothing_radius);
+			viscosityForce += (neighborVelocity - velocity) * ViscosityKernel(distance, settings.smoothing_radius);
 		}
 	}
 
