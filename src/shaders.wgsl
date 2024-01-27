@@ -285,39 +285,37 @@ fn ApplyPressureForceCompute(
 
     velocities[id.x] += CalculatePressure(id.x);
 }
-
-/* 
-	Note that the force component from pressure is directly proportional to the
-	density gradient, as per the Navier-Stokes equations. The relationship is
-	expressed by the equation:
-
-	F_pressure = -∇P
-
-	where:
-	F_pressure is the force from pressure,
-	∇P is the density gradient.
-
-	We calculate pressure at each particle by taking the difference between the
-	current density (from the buffer) and the desired resting density of the
-	fluid (from the settings). This is biased by a controllable multiplier. The 
-	pressure between the two particles is then averaged (to apply Newton's 3rd
-	Law). The final force component is then calculated as:
-	
-	direction * (pressure / density) * bias
-
-	where bias is inversely proportional to distance.
-
-	Some notes:
-	The mass of all particles is considered to be trivial, so no division by
-	mass is necessary for the completion of the equation. Instead, we divide
-	by the density at the point (since an instant of density is just mass).
-
-	There are two pressure forces calculated: one based on the difference from
-	the desired resting density of the fluid, and one based on only the density
-	at the particle. This second density (density_near) is necessary to act as
-	a repulsion force that keeps particles apart when everything is at the 
-	desired density - otherwise, particles glob together.
-*/
+ 
+//	Note that the force component from pressure is directly proportional to the
+//	density gradient, as per the Navier-Stokes equations. The relationship is
+//	expressed by the equation:
+//
+//	F_pressure = -∇P
+//
+//	where:
+//	F_pressure is the force from pressure,
+//	∇P is the density gradient.
+//
+//	We calculate pressure at each particle by taking the difference between the
+//	current density (from the buffer) and the desired resting density of the
+//	fluid (from the settings). This is biased by a controllable multiplier. The 
+//	pressure between the two particles is then averaged (to apply Newton's 3rd
+//	Law). The final force component is then calculated as:
+//	
+//	direction * (pressure / density) * bias
+//
+//	where bias is inversely proportional to distance.
+//
+//	Some notes:
+//	The mass of all particles is considered to be trivial, so no division by
+//	mass is necessary for the completion of the equation. Instead, we divide
+//	by the density at the point (since an instant of density is just mass).
+//
+//	There are two pressure forces calculated: one based on the difference from
+//	the desired resting density of the fluid, and one based on only the density
+//	at the particle. This second density (density_near) is necessary to act as
+//	a repulsion force that keeps particles apart when everything is at the 
+//	desired density - otherwise, particles glob together.
 
 fn CalculatePressure(
 	i: u32,
@@ -420,31 +418,31 @@ fn ApplyViscosityForceCompute(
     velocities[id.x] += CalculateViscosity(id.x);
 }
 
-/* 
-	Viscosity in a Newtonian fluid acts as, essentially, the diffusion of 
-	average velocity across the fluid. This is what the viscosity term in the
-	Navier-Stokes equations represents.
 
-	F_viscosity = mu * ∇^2 V
+//	Viscosity in a Newtonian fluid acts as, essentially, the diffusion of 
+//	average velocity across the fluid. This is what the viscosity term in the
+//	Navier-Stokes equations represents.
+//
+//	F_viscosity = mu * ∇^2 V
+//
+//	where:
+//	F_viscosity is the force from viscosity,
+//	∇V is the velocity gradient,
+//	∇^2 V is the acceleration gradient.
+//
+//	We calculate acceleration from viscosity between each pair of particles by
+//	looking at the difference in velocity between them, and adding some bias to
+//	adjust for the distance between them. The end result ends up being
+//	
+//	(myVelocity - neighborVelocity) * bias * viscosityStrength
+//
+//	where bias is (again) inversely proportional to distance.
+//
+//	Some notes:
+//	We only need to calculate the acceleration on the particle (because we 
+//	assume that the mass of each particle is the same & is trivial), so no
+//	division by mass (aka instantaneous density) is required.
 
-	where:
-	F_viscosity is the force from viscosity,
-	∇V is the velocity gradient,
-	∇^2 V is the acceleration gradient.
-
-	We calculate acceleration from viscosity between each pair of particles by
-	looking at the difference in velocity between them, and adding some bias to
-	adjust for the distance between them. The end result ends up being
-	
-	(myVelocity - neighborVelocity) * bias * viscosityStrength
-
-	where bias is (again) inversely proportional to distance.
-
-	Some notes:
-	We only need to calculate the acceleration on the particle (because we 
-	assume that the mass of each particle is the same & is trivial), so no
-	division by mass (aka instantaneous density) is required.
-*/
 fn CalculateViscosity(
 	i: u32,
 ) -> vec2<f32> {
