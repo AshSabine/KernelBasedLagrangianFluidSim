@@ -507,3 +507,5 @@ fn CalculateViscosity(
 	//	Return adjusted viscosiy force
 	return (viscosityForce * settings.viscosity_strength) * settings.dT;
 }
+
+//		Kernels
