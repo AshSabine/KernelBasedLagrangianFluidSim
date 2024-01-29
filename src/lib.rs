@@ -19,22 +19,24 @@ pub async fn run() {
     let event_loop: EventLoop<()> = EventLoop::new().unwrap();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-    //  Get device stuff
+    //  This is the GPU instance
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::all(),
         ..Default::default()
     });
     let surface = unsafe { instance.create_surface(&window) }.unwrap();
 
-    let (device, queue) = pollster::block_on( async {
-        let adapter = instance.request_adapter(
-            &wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(&surface),
-                force_fallback_adapter: false,
-            },
-        ).await.unwrap();
+    //  This is the interface with the GPU
+    let adapter = instance.request_adapter(
+        &wgpu::RequestAdapterOptions {
+            power_preference: wgpu::PowerPreference::default(),
+            compatible_surface: Some(&surface),
+            force_fallback_adapter: false,
+        },
+    ).await.unwrap();
 
+    //  Get the device and queue (used to send/queue operations)
+    let (device, queue) = pollster::block_on( async {
         adapter.request_device(
             &wgpu::DeviceDescriptor {
                 label: None,
@@ -48,19 +50,40 @@ pub async fn run() {
         ).await.unwrap()
     });
 
-	//  Initialize the FluidSimulation
+    //  Configure surface
+    let surface_caps = surface.get_capabilities(&adapter);
+    let surface_format = surface_caps.formats.iter()
+        .copied()
+        .filter(|f| f.is_srgb())
+        .next()
+        .unwrap_or(surface_caps.formats[0]);
+    
+    let config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: surface_format,
+        width: 800,
+        height: 600,
+        present_mode: surface_caps.present_modes[0],
+        alpha_mode: surface_caps.alpha_modes[0],
+        view_formats: vec![],
+        desired_maximum_frame_latency: 100,
+    };
+    surface.configure(&device, &config);
+
+    //      Fluid sim stuff
+	//  Initial state
     let initial_state = FluidInitialState {
         pos: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
         vel: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
     };
     
+    //  Create
     let mut fluid_simulation = FluidSimulation::new(
         &device,
         initial_state,
-        &window,
     );
 
-	//  Main loop
+	//      Main loop
     if let Err(err) = event_loop.run(|event, target| 
         match event {
             Event::WindowEvent {
@@ -83,8 +106,11 @@ pub async fn run() {
                         label: Some("Render Encoder"),
                     }); 
                     
-                    //  Update sim + render
+                    //  Update sim + copy data
                     fluid_simulation.compute(&mut encoder);
+					fluid_simulation.copy_to_vertex_buffer(&mut encoder);
+
+					//	Render
                     fluid_simulation.render_particles(&mut encoder, &view);
                     
                     //  Submit to the queue

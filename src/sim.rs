@@ -86,6 +86,8 @@ pub struct FluidSimulation {
 	settings: Settings,
 
 	//		Rendering data
+	vertex_buffer: wgpu::Buffer,
+
 	particle_render_shader: wgpu::ShaderModule,
     particle_render_pipeline: wgpu::RenderPipeline,
 }
@@ -94,12 +96,16 @@ impl FluidSimulation {
 	pub fn new(
         device: &Device, 
         initial_state: FluidInitialState, 
-        window: &Window
     ) -> Self {
 		//			Simulation
 		//		Create buffers
 		//	Basic data
-        let position_buffer = create_buffer(device, &initial_state.pos, "Positions Buffer");
+        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Positions Buffer"),
+            contents: bytemuck::cast_slice(&initial_state.pos),
+            usage: wgpu::BufferUsages::STORAGE 
+				| wgpu::BufferUsages::COPY_SRC,
+        });  //create_buffer(device, &initial_state.pos, "Positions Buffer");
         let velocity_buffer = create_buffer(device, &initial_state.vel, "Velocities Buffer");
 
         //  Other physics
@@ -138,11 +144,11 @@ impl FluidSimulation {
 
 			collision_damping: 0.5,
         };
-
         let settings_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Settings Buffer"),
             contents: bytemuck::cast_slice(&[settings]),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::STORAGE,
+            usage: wgpu::BufferUsages::UNIFORM 
+				| wgpu::BufferUsages::STORAGE,
         });
 
         //      Shader modules
@@ -324,6 +330,14 @@ impl FluidSimulation {
         );
 
 		//			Rendering
+        //	Create vertex buffer
+		let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+			label: Some("Vertex Buffer"),
+			size: position_buffer.size() as wgpu::BufferAddress * std::mem::size_of::<nalgebra::Vector2<f32>>() as wgpu::BufferAddress,
+			usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+			mapped_at_creation: false,
+		});
+
 		//	Create shader module
 		let render_shader = device.create_shader_module(wgpu::include_wgsl!("render.wgsl"));
 
@@ -341,13 +355,19 @@ impl FluidSimulation {
             vertex: wgpu::VertexState {
                 module: &render_shader,
                 entry_point: "main_vertex",
-                buffers: &[],
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<nalgebra::Vector2<f32>>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x2, // Assuming your position data is a 2D vector
+                    ],
+                }],
             },
             fragment: Some(wgpu::FragmentState {
                 module: &render_shader,
                 entry_point: "main_fragment",
                 targets: &[Some( wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
                     blend: Some(wgpu::BlendState::REPLACE), // Adjust blend state as needed
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -410,6 +430,8 @@ impl FluidSimulation {
             settings,
 
 			//		Render data
+			vertex_buffer,
+
 			particle_render_shader: render_shader,
 			particle_render_pipeline: render_pipeline,
         }
@@ -458,9 +480,20 @@ impl FluidSimulation {
 			});
 			cpass.set_pipeline(&pipeline);
 			cpass.set_bind_group(0, &self.buffers_bind_group, &[]);
-			cpass.set_bind_group(0, &self.settings_bind_group, &[]);
+			cpass.set_bind_group(1, &self.settings_bind_group, &[]);
 			cpass.dispatch_workgroups(dispatch_size, 1, 1);
 		}
+	}
+
+	pub fn copy_to_vertex_buffer(
+		&mut self,
+		encoder: &mut wgpu::CommandEncoder,
+	) {
+		encoder.copy_buffer_to_buffer(
+			&self.position_buffer, 0,
+			&self.density_buffer, 0,
+			self.position_buffer.size(),
+		);
 	}
 
 	//		Render stuff
@@ -487,6 +520,7 @@ impl FluidSimulation {
 
         // Set pipeline and bind groups
         render_pass.set_pipeline(&self.particle_render_pipeline);
+        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); //self.num_particles as u64
         render_pass.set_bind_group(0, &self.buffers_bind_group, &[]);
         render_pass.set_bind_group(1, &self.settings_bind_group, &[]);
 
@@ -505,7 +539,8 @@ fn create_buffer<T: bytemuck::Pod>(
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(data),
-        usage: wgpu::BufferUsages::STORAGE,
+        usage: wgpu::BufferUsages::STORAGE 
+			| wgpu::BufferUsages::COPY_DST,
     })
 }
 
@@ -519,7 +554,8 @@ fn create_buffer_zeros<T: bytemuck::Pod + bytemuck::Zeroable + Clone>(
     device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
         label: Some(label),
         contents: bytemuck::cast_slice(&zeroed_data),
-        usage: wgpu::BufferUsages::STORAGE,
+        usage: wgpu::BufferUsages::STORAGE
+			| wgpu::BufferUsages::COPY_DST,
     })
 }
 
