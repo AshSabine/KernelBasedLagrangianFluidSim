@@ -1,6 +1,6 @@
 //use piston_window::PistonWindow;
 //		Import
-use winit::window::Window;
+
 use wgpu::{
 	util::DeviceExt,
 	Device
@@ -396,8 +396,8 @@ impl FluidSimulation {
         });
 
 		//	Create object
-		FluidSimulation {
-            num_particles: 0 as u32,
+		Self {
+            num_particles: 1000 as u32,
 			
 			//		Simulation data
             //	Buffers
@@ -491,7 +491,7 @@ impl FluidSimulation {
 	) {
 		encoder.copy_buffer_to_buffer(
 			&self.position_buffer, 0,
-			&self.density_buffer, 0,
+			&self.vertex_buffer, 0,
 			self.position_buffer.size(),
 		);
 	}

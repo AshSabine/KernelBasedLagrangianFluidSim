@@ -1,8 +1,9 @@
 use winit::{
     event::*, event_loop::{
-        ControlFlow, 
         EventLoop
-    }, keyboard::{KeyCode, PhysicalKey}, window::WindowBuilder
+    }, 
+	keyboard::{KeyCode, PhysicalKey}, 
+	window::{Window, WindowBuilder}
 };
 
 use pollster;
@@ -14,74 +15,136 @@ use sim::{
     FluidInitialState
 };
 
-pub async fn run() {
+//	Struct
+struct State<'a> {
+    surface: wgpu::Surface<'a>,
+    device: wgpu::Device,
+    queue: wgpu::Queue,
+    config: wgpu::SurfaceConfiguration,
+    size: winit::dpi::PhysicalSize<u32>,
+    window: &'a Window,
+
+	fluid_sim: FluidSimulation,
+}
+
+impl<'a> State<'a> {
+	async fn new(
+		window: &'a Window
+	) -> State<'a> {
+		let size = window.inner_size();
+
+		//  This is the instance, a handle to the GPU. 
+		//	Used to create everything else needed.
+		let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
+			backends: wgpu::Backends::all(),
+			..Default::default()
+		});
+
+		//	This is the inner part of the window.
+		let surface = unsafe { instance.create_surface(window) }.unwrap();
+
+		//  This is the actual interface w/ the GPU.
+		let adapter = instance.request_adapter(
+			&wgpu::RequestAdapterOptions {
+				power_preference: wgpu::PowerPreference::default(),
+				compatible_surface: Some(&surface),
+				force_fallback_adapter: false,
+			},
+		).await.unwrap();
+	
+		//  Get the device and queue (used to send/queue operations)
+		let (device, queue) = pollster::block_on( async {
+			adapter.request_device(
+				&wgpu::DeviceDescriptor {
+					label: None,
+					required_features: wgpu::Features::VERTEX_WRITABLE_STORAGE,
+					required_limits: if cfg!(target_arch = "wasm32") {
+						wgpu::Limits::downlevel_webgl2_defaults()
+					} else {
+						wgpu::Limits::default()
+					},
+				}, None,
+			).await.unwrap()
+		});
+	
+		//  Configure surface
+		let surface_caps = surface.get_capabilities(&adapter);
+		let surface_format = surface_caps.formats.iter()
+			.copied()
+			.filter(|f| f.is_srgb())
+			.next()
+			.unwrap_or(surface_caps.formats[0]);
+		
+		let config = wgpu::SurfaceConfiguration {
+			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+			format: surface_format,
+			width: 800,
+			height: 600,
+			present_mode: surface_caps.present_modes[0],
+			alpha_mode: surface_caps.alpha_modes[0],
+			view_formats: vec![],
+			desired_maximum_frame_latency: 100,
+		};
+		surface.configure(&device, &config);
+
+		//		Fluid sim stuff
+		//  Initial state
+		let initial_state = FluidInitialState {
+			pos: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
+			vel: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
+		};
+
+		//  Create
+		let fluid_sim = FluidSimulation::new(
+			&device,
+			initial_state,
+		);
+
+		Self {
+            surface,
+            device,
+            queue,
+            config,
+            size,
+            window,
+			fluid_sim,
+        }
+	}
+
+	fn render(
+		&mut self
+	) -> Result<(), wgpu::SurfaceError> {
+		let output = self.surface.get_current_texture()?;	//	Error here. dunno why. fucking hell
+        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+		let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+			label: Some("Render Encoder"),
+		});
+
+		//  Update sim + copy data
+		self.fluid_sim.compute(&mut encoder);
+		self.fluid_sim.copy_to_vertex_buffer(&mut encoder);
+
+		//	Render
+		self.fluid_sim.render_particles(&mut encoder, &view);
+		
+		//  Submit to the queue
+		self.queue.submit(std::iter::once(encoder.finish()));
+
+		//	Return ok
+		Ok(())
+	}
+}
+
+
+//	Funcs
+pub async fn run() {	
 	//  Create an event loop + winit window
     let event_loop: EventLoop<()> = EventLoop::new().unwrap();
     let window = WindowBuilder::new().build(&event_loop).unwrap();
 
-    //  This is the GPU instance
-    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
-        backends: wgpu::Backends::all(),
-        ..Default::default()
-    });
-    let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-    //  This is the interface with the GPU
-    let adapter = instance.request_adapter(
-        &wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::default(),
-            compatible_surface: Some(&surface),
-            force_fallback_adapter: false,
-        },
-    ).await.unwrap();
-
-    //  Get the device and queue (used to send/queue operations)
-    let (device, queue) = pollster::block_on( async {
-        adapter.request_device(
-            &wgpu::DeviceDescriptor {
-                label: None,
-                required_features: wgpu::Features::VERTEX_WRITABLE_STORAGE,
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
-            }, None,
-        ).await.unwrap()
-    });
-
-    //  Configure surface
-    let surface_caps = surface.get_capabilities(&adapter);
-    let surface_format = surface_caps.formats.iter()
-        .copied()
-        .filter(|f| f.is_srgb())
-        .next()
-        .unwrap_or(surface_caps.formats[0]);
-    
-    let config = wgpu::SurfaceConfiguration {
-        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface_format,
-        width: 800,
-        height: 600,
-        present_mode: surface_caps.present_modes[0],
-        alpha_mode: surface_caps.alpha_modes[0],
-        view_formats: vec![],
-        desired_maximum_frame_latency: 100,
-    };
-    surface.configure(&device, &config);
-
-    //      Fluid sim stuff
-	//  Initial state
-    let initial_state = FluidInitialState {
-        pos: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
-        vel: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
-    };
-    
-    //  Create
-    let mut fluid_simulation = FluidSimulation::new(
-        &device,
-        initial_state,
-    );
+	//	New state
+	let mut state = State::new(&window).await;
 
 	//      Main loop
     if let Err(err) = event_loop.run(|event, target| 
@@ -99,22 +162,14 @@ pub async fn run() {
                     }, ..
                 } => target.exit(),
                 WindowEvent::RedrawRequested => {
-                    let output = surface.get_current_texture().unwrap();
-                    let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
-
-                    let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                        label: Some("Render Encoder"),
-                    }); 
-                    
-                    //  Update sim + copy data
-                    fluid_simulation.compute(&mut encoder);
-					fluid_simulation.copy_to_vertex_buffer(&mut encoder);
-
-					//	Render
-                    fluid_simulation.render_particles(&mut encoder, &view);
-                    
-                    //  Submit to the queue
-                    queue.submit(std::iter::once(encoder.finish()));
+                    match state.render() {
+						Ok(_) => {}
+						Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+							()
+						}
+						Err(wgpu::SurfaceError::OutOfMemory) => target.exit(),
+						Err(wgpu::SurfaceError::Timeout) => println!("Surface timeout"),
+					}
     
                     //  Request a redraw
                     window.request_redraw();
