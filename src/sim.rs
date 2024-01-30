@@ -1,6 +1,6 @@
 //use piston_window::PistonWindow;
 //		Import
-
+use winit::window::Window;
 use wgpu::{
 	util::DeviceExt,
 	Device
