@@ -41,7 +41,7 @@ impl<'a> State<'a> {
 		});
 
 		//	This is the inner part of the window.
-		let surface = unsafe { instance.create_surface(window) }.unwrap();
+		let surface = { instance.create_surface(window) }.unwrap();
 
 		//  This is the actual interface w/ the GPU.
 		let adapter = instance.request_adapter(
@@ -78,8 +78,8 @@ impl<'a> State<'a> {
 		let config = wgpu::SurfaceConfiguration {
 			usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
 			format: surface_format,
-			width: 800,
-			height: 600,
+			width: 800, //window.inner_size().width,	//800
+			height: 600, //window.inner_size().height,	//600
 			present_mode: surface_caps.present_modes[0],
 			alpha_mode: surface_caps.alpha_modes[0],
 			view_formats: vec![],
@@ -91,7 +91,7 @@ impl<'a> State<'a> {
 		//  Initial state
 		let initial_state = FluidInitialState {
 			pos: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
-			vel: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
+			vel: vec![nalgebra::Vector2::new(0.0, 0.0); sim::MAX_PARTICLES],
 		};
 
 		//  Create
@@ -114,7 +114,7 @@ impl<'a> State<'a> {
 	fn render(
 		&mut self
 	) -> Result<(), wgpu::SurfaceError> {
-		let output = self.surface.get_current_texture()?;	//	Error here. dunno why. fucking hell
+		let output = self.surface.get_current_texture()?;
         let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
 		let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -131,8 +131,22 @@ impl<'a> State<'a> {
 		//  Submit to the queue
 		self.queue.submit(std::iter::once(encoder.finish()));
 
+		//	Present output
+		output.present();
+
 		//	Return ok
 		Ok(())
+	}
+
+	pub fn resize(
+		&mut self, new_size: winit::dpi::PhysicalSize<u32>
+	) {
+		if new_size.width > 0 && new_size.height > 0 {
+			self.size = new_size;
+			self.config.width = new_size.width;
+			self.config.height = new_size.height;
+			self.surface.configure(&self.device, &self.config);
+		}
 	}
 }
 
@@ -165,7 +179,7 @@ pub async fn run() {
                     match state.render() {
 						Ok(_) => {}
 						Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-							()
+							state.resize(state.size)
 						}
 						Err(wgpu::SurfaceError::OutOfMemory) => target.exit(),
 						Err(wgpu::SurfaceError::Timeout) => println!("Surface timeout"),
@@ -173,7 +187,10 @@ pub async fn run() {
     
                     //  Request a redraw
                     window.request_redraw();
-                }
+                },
+				WindowEvent::Resized(physical_size) => {
+					state.resize(*physical_size);
+				},
                 _ => {}
             },
             
