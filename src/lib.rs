@@ -1,7 +1,7 @@
 use winit::{
-    event::*, event_loop::{
-        EventLoop
-    }, 
+	event::*, event_loop::{
+		EventLoop
+	}, 
 	keyboard::{KeyCode, PhysicalKey}, 
 	window::{Window, WindowBuilder}
 };
@@ -12,17 +12,17 @@ use wgpu;
 mod sim;
 use sim::{
 	FluidSimulation,
-    FluidInitialState
+	FluidInitialState
 };
 
 //	Struct
 struct State<'a> {
-    surface: wgpu::Surface<'a>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
-    size: winit::dpi::PhysicalSize<u32>,
-    window: &'a Window,
+	surface: wgpu::Surface<'a>,
+	device: wgpu::Device,
+	queue: wgpu::Queue,
+	config: wgpu::SurfaceConfiguration,
+	size: winit::dpi::PhysicalSize<u32>,
+	window: &'a Window,
 
 	fluid_sim: FluidSimulation,
 }
@@ -91,7 +91,7 @@ impl<'a> State<'a> {
 		//  Initial state
 		let initial_state = FluidInitialState {
 			pos: vec![nalgebra::Vector2::new(100.0, 100.0); sim::MAX_PARTICLES],
-			vel: vec![nalgebra::Vector2::new(0.0, 0.0); sim::MAX_PARTICLES],
+			vel: vec![nalgebra::Vector2::new(1.0, 1.0); sim::MAX_PARTICLES],
 		};
 
 		//  Create
@@ -101,21 +101,21 @@ impl<'a> State<'a> {
 		);
 
 		Self {
-            surface,
-            device,
-            queue,
-            config,
-            size,
-            window,
+			surface,
+			device,
+			queue,
+			config,
+			size,
+			window,
 			fluid_sim,
-        }
+		}
 	}
 
 	fn render(
 		&mut self
 	) -> Result<(), wgpu::SurfaceError> {
 		let output = self.surface.get_current_texture()?;
-        let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
+		let view = output.texture.create_view(&wgpu::TextureViewDescriptor::default());
 
 		let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
 			label: Some("Render Encoder"),
@@ -154,29 +154,29 @@ impl<'a> State<'a> {
 //	Funcs
 pub async fn run() {	
 	//  Create an event loop + winit window
-    let event_loop: EventLoop<()> = EventLoop::new().unwrap();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+	let event_loop: EventLoop<()> = EventLoop::new().unwrap();
+	let window = WindowBuilder::new().build(&event_loop).unwrap();
 
 	//	New state
 	let mut state = State::new(&window).await;
 
-	//      Main loop
-    if let Err(err) = event_loop.run(|event, target| 
-        match event {
-            Event::WindowEvent {
-                ref event,
-                window_id,
-            } if window_id == window.id() => match event {
-                WindowEvent::CloseRequested | 
-                WindowEvent::KeyboardInput {
-                    event: KeyEvent {
-                        state: ElementState::Pressed,
-                        physical_key: PhysicalKey::Code(KeyCode::Escape),
-                        ..
-                    }, ..
-                } => target.exit(),
-                WindowEvent::RedrawRequested => {
-                    match state.render() {
+	//	  Main loop
+	if let Err(err) = event_loop.run(|event, target| 
+		match event {
+			Event::WindowEvent {
+				ref event,
+				window_id,
+			} if window_id == window.id() => match event {
+				WindowEvent::CloseRequested | 
+				WindowEvent::KeyboardInput {
+					event: KeyEvent {
+						state: ElementState::Pressed,
+						physical_key: PhysicalKey::Code(KeyCode::Escape),
+						..
+					}, ..
+				} => target.exit(),
+				WindowEvent::RedrawRequested => {
+					match state.render() {
 						Ok(_) => {}
 						Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
 							state.resize(state.size)
@@ -184,19 +184,19 @@ pub async fn run() {
 						Err(wgpu::SurfaceError::OutOfMemory) => target.exit(),
 						Err(wgpu::SurfaceError::Timeout) => println!("Surface timeout"),
 					}
-    
-                    //  Request a redraw
-                    window.request_redraw();
-                },
+	
+					//  Request a redraw
+					window.request_redraw();
+				},
 				WindowEvent::Resized(physical_size) => {
 					state.resize(*physical_size);
 				},
-                _ => {}
-            },
-            
-            _ => {}
-        }
-    ) {
-        println!("error: {err:?}");
-    }
+				_ => {}
+			},
+			
+			_ => {}
+		}
+	) {
+		println!("error: {err:?}");
+	}
 }

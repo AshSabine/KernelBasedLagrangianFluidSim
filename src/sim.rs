@@ -9,22 +9,22 @@ use wgpu::{
 
 use nalgebra::{Vector2, Vector3};
 
-//      Data
+//	  Data
 pub const MAX_PARTICLES: usize = 2000000;
 
 //		Structures
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct FluidInitialState {	//	SoA because this allows me to have seperate pos and vel buffers
-    pub pos: Vec<Vector2<f32>>,
-    pub vel: Vec<Vector2<f32>>,
+	pub pos: Vec<Vector2<f32>>,
+	pub vel: Vec<Vector2<f32>>,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Settings {
-    //      Particle stuff
-    max_particles: usize, 
+	//	  Particle stuff
+	max_particles: usize, 
 
 	//		Timekeeping	
 	time_scale: f32,
@@ -37,16 +37,16 @@ pub struct Settings {
 
 	smoothing_radius: f32,
 	target_density: f32,
-    
+	
 	pressure_multiplier: f32,
-    pressure_multiplier_near: f32,
+	pressure_multiplier_near: f32,
 
-    viscosity_strength: f32,
+	viscosity_strength: f32,
 
 	//		Bounds & obstacles
 	bounds_size: Vector2<f32>,
-    obstacle_size: Vector2<f32>,
-    obstacle_pos: Vector2<f32>,
+	obstacle_size: Vector2<f32>,
+	obstacle_pos: Vector2<f32>,
 
 	collision_damping: f32,
 }
@@ -66,17 +66,17 @@ pub struct FluidSimulation {
 	local_indices_buffer: wgpu::Buffer,	//	Vector3<u32>
 	local_offsets_buffer: wgpu::Buffer,	//	u32
 
-    //  Pipelines
-    pipeline_update_pos: wgpu::ComputePipeline,
+	//  Pipelines
+	pipeline_update_pos: wgpu::ComputePipeline,
 
-    pipeline_external_forces: wgpu::ComputePipeline,
-    pipeline_predict_pos: wgpu::ComputePipeline,
+	pipeline_external_forces: wgpu::ComputePipeline,
+	pipeline_predict_pos: wgpu::ComputePipeline,
 
-    pipeline_update_locality: wgpu::ComputePipeline,
-    pipeline_update_density: wgpu::ComputePipeline,
+	pipeline_update_locality: wgpu::ComputePipeline,
+	pipeline_update_density: wgpu::ComputePipeline,
 
-    pipeline_apply_pressure: wgpu::ComputePipeline,
-    pipeline_apply_viscosity: wgpu::ComputePipeline,
+	pipeline_apply_pressure: wgpu::ComputePipeline,
+	pipeline_apply_viscosity: wgpu::ComputePipeline,
 
 	//	Bind Groups
 	buffers_bind_group: wgpu::BindGroup,
@@ -89,36 +89,36 @@ pub struct FluidSimulation {
 	vertex_buffer: wgpu::Buffer,
 
 	particle_render_shader: wgpu::ShaderModule,
-    particle_render_pipeline: wgpu::RenderPipeline,
+	particle_render_pipeline: wgpu::RenderPipeline,
 }
 
 impl FluidSimulation {
 	pub fn new(
-        device: &Device, 
-        initial_state: FluidInitialState, 
-    ) -> Self {
+		device: &Device, 
+		initial_state: FluidInitialState, 
+	) -> Self {
 		//			Simulation
 		//		Create buffers
 		//	Basic data
-        let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Positions Buffer"),
-            contents: bytemuck::cast_slice(&initial_state.pos),
-            usage: wgpu::BufferUsages::STORAGE 
+		let position_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Positions Buffer"),
+			contents: bytemuck::cast_slice(&initial_state.pos),
+			usage: wgpu::BufferUsages::STORAGE 
 				| wgpu::BufferUsages::COPY_SRC,
-        });  //create_buffer(device, &initial_state.pos, "Positions Buffer");
-        let velocity_buffer = create_buffer(device, &initial_state.vel, "Velocities Buffer");
+		});  //create_buffer(device, &initial_state.pos, "Positions Buffer");
+		let velocity_buffer = create_buffer(device, &initial_state.vel, "Velocities Buffer");
 
-        //  Other physics
-        let predicted_pos_buffer = create_buffer_zeros::<Vector2<f32>>(device, MAX_PARTICLES, "Predicted Positions Buffer");
-        let density_buffer = create_buffer_zeros::<Vector2<f32>>(device, MAX_PARTICLES, "Densities Buffer");
+		//  Other physics
+		let predicted_pos_buffer = create_buffer_zeros::<Vector2<f32>>(device, MAX_PARTICLES, "Predicted Positions Buffer");
+		let density_buffer = create_buffer_zeros::<Vector2<f32>>(device, MAX_PARTICLES, "Densities Buffer");
 
-        //  Spacial hashing stuff
-        let local_indices_buffer = create_buffer_zeros::<Vector3<u32>>(device, MAX_PARTICLES, "Local Indices Buffer");
-        let local_offsets_buffer = create_buffer_zeros::<u32>(device, MAX_PARTICLES, "Local Offsets Buffer");
+		//  Spacial hashing stuff
+		let local_indices_buffer = create_buffer_zeros::<Vector3<u32>>(device, MAX_PARTICLES, "Local Indices Buffer");
+		let local_offsets_buffer = create_buffer_zeros::<u32>(device, MAX_PARTICLES, "Local Offsets Buffer");
 
-        //  Settings
-        let settings = Settings {
-            max_particles: MAX_PARTICLES, 
+		//  Settings
+		let settings = Settings {
+			max_particles: MAX_PARTICLES, 
 
 			//		Timekeeping	
 			time_scale: 1.,
@@ -143,194 +143,194 @@ impl FluidSimulation {
 			obstacle_pos: Vector2::new(400., 200.),
 
 			collision_damping: 0.5,
-        };
-        let settings_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Settings Buffer"),
-            contents: bytemuck::cast_slice(&[settings]),
-            usage: wgpu::BufferUsages::UNIFORM 
+		};
+		let settings_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+			label: Some("Settings Buffer"),
+			contents: bytemuck::cast_slice(&[settings]),
+			usage: wgpu::BufferUsages::UNIFORM 
 				| wgpu::BufferUsages::STORAGE,
-        });
+		});
 
-        //      Shader modules
-        let shader = device.create_shader_module(wgpu::include_wgsl!("shaders.wgsl"));
+		//	  Shader modules
+		let shader = device.create_shader_module(wgpu::include_wgsl!("shaders.wgsl"));
 
-        //      Bind group
-        let buffers_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[
-                //  Position
-                wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStages::all(),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: false,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                //  Velocity
-                wgpu::BindGroupLayoutEntry {
-                    binding: 1,
-                    visibility: wgpu::ShaderStages::all(),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: false,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                //  Predicted position
-                wgpu::BindGroupLayoutEntry {
-                    binding: 2,
-                    visibility: wgpu::ShaderStages::all(),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: false,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                //  Density
-                wgpu::BindGroupLayoutEntry {
-                    binding: 3,
-                    visibility: wgpu::ShaderStages::all(),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: false,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                //  Local indices
-                wgpu::BindGroupLayoutEntry {
-                    binding: 4,
-                    visibility: wgpu::ShaderStages::all(),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: false,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-                //  Local offsets
-                wgpu::BindGroupLayoutEntry {
-                    binding: 5,
-                    visibility: wgpu::ShaderStages::all(),
-                    ty: wgpu::BindingType::Buffer {
-                        ty: wgpu::BufferBindingType::Storage {
-                            read_only: false,
-                        },
-                        has_dynamic_offset: false,
-                        min_binding_size: None,
-                    },
-                    count: None,
-                },
-            ],
-            label: Some("Buffers Bind Group Layout"),
-        });
-        let buffers_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            layout: &buffers_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: position_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: velocity_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: predicted_pos_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: density_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 4,
-                    resource: local_indices_buffer.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 5,
-                    resource: local_offsets_buffer.as_entire_binding(),
-                },
-            ],
-            label: Some("Buffers Bind Group"),
-        });
+		//	  Bind group
+		let buffers_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[
+				//  Position
+				wgpu::BindGroupLayoutEntry {
+					binding: 0,
+					visibility: wgpu::ShaderStages::all(),
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Storage {
+							read_only: false,
+						},
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+				//  Velocity
+				wgpu::BindGroupLayoutEntry {
+					binding: 1,
+					visibility: wgpu::ShaderStages::all(),
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Storage {
+							read_only: false,
+						},
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+				//  Predicted position
+				wgpu::BindGroupLayoutEntry {
+					binding: 2,
+					visibility: wgpu::ShaderStages::all(),
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Storage {
+							read_only: false,
+						},
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+				//  Density
+				wgpu::BindGroupLayoutEntry {
+					binding: 3,
+					visibility: wgpu::ShaderStages::all(),
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Storage {
+							read_only: false,
+						},
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+				//  Local indices
+				wgpu::BindGroupLayoutEntry {
+					binding: 4,
+					visibility: wgpu::ShaderStages::all(),
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Storage {
+							read_only: false,
+						},
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+				//  Local offsets
+				wgpu::BindGroupLayoutEntry {
+					binding: 5,
+					visibility: wgpu::ShaderStages::all(),
+					ty: wgpu::BindingType::Buffer {
+						ty: wgpu::BufferBindingType::Storage {
+							read_only: false,
+						},
+						has_dynamic_offset: false,
+						min_binding_size: None,
+					},
+					count: None,
+				},
+			],
+			label: Some("Buffers Bind Group Layout"),
+		});
+		let buffers_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			layout: &buffers_layout,
+			entries: &[
+				wgpu::BindGroupEntry {
+					binding: 0,
+					resource: position_buffer.as_entire_binding(),
+				},
+				wgpu::BindGroupEntry {
+					binding: 1,
+					resource: velocity_buffer.as_entire_binding(),
+				},
+				wgpu::BindGroupEntry {
+					binding: 2,
+					resource: predicted_pos_buffer.as_entire_binding(),
+				},
+				wgpu::BindGroupEntry {
+					binding: 3,
+					resource: density_buffer.as_entire_binding(),
+				},
+				wgpu::BindGroupEntry {
+					binding: 4,
+					resource: local_indices_buffer.as_entire_binding(),
+				},
+				wgpu::BindGroupEntry {
+					binding: 5,
+					resource: local_offsets_buffer.as_entire_binding(),
+				},
+			],
+			label: Some("Buffers Bind Group"),
+		});
 
-        let settings_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::all(),
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Storage { read_only: true },
-                    has_dynamic_offset: false,
-                    min_binding_size: None,
-                },
-                count: None,
-            }],
-            label: Some("Settings Bind Group Layout"),
-        });
-        let settings_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("SimulationSettings Bind Group"),
-            layout: &settings_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: settings_buffer.as_entire_binding()
-            }],
-        });
+		let settings_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+			entries: &[wgpu::BindGroupLayoutEntry {
+				binding: 0,
+				visibility: wgpu::ShaderStages::all(),
+				ty: wgpu::BindingType::Buffer {
+					ty: wgpu::BufferBindingType::Storage { read_only: true },
+					has_dynamic_offset: false,
+					min_binding_size: None,
+				},
+				count: None,
+			}],
+			label: Some("Settings Bind Group Layout"),
+		});
+		let settings_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+			label: Some("SimulationSettings Bind Group"),
+			layout: &settings_layout,
+			entries: &[wgpu::BindGroupEntry {
+				binding: 0,
+				resource: settings_buffer.as_entire_binding()
+			}],
+		});
 
-        //      Pipelines
-        let layouts = &[&buffers_layout, &settings_layout];
-        
-        let pipeline_update_pos = create_compute_helper(
-            device, layouts, &shader, 
-            "UpdatePositionsCompute", "Update Pos Pipeline"
-        );
+		//	  Pipelines
+		let layouts = &[&buffers_layout, &settings_layout];
+		
+		let pipeline_update_pos = create_compute_helper(
+			device, layouts, &shader, 
+			"UpdatePositionsCompute", "Update Pos Pipeline"
+		);
 
-        let pipeline_external_forces = create_compute_helper(
-            device, layouts, &shader, 
-            "ApplyExternalForcesCompute", "External Forces Pipeline"
-        );
+		let pipeline_external_forces = create_compute_helper(
+			device, layouts, &shader, 
+			"ApplyExternalForcesCompute", "External Forces Pipeline"
+		);
 
-        let pipeline_predict_pos = create_compute_helper(
-            device, layouts, &shader, 
-            "UpdatePredictedPosCompute", "Predict Pos Pipeline"
-        );
+		let pipeline_predict_pos = create_compute_helper(
+			device, layouts, &shader, 
+			"UpdatePredictedPosCompute", "Predict Pos Pipeline"
+		);
 
-        let pipeline_update_locality = create_compute_helper(
-            device, layouts, &shader, 
-            "UpdateLocalHashCompute", "Update Locality Pipeline"
-        );
+		let pipeline_update_locality = create_compute_helper(
+			device, layouts, &shader, 
+			"UpdateLocalHashCompute", "Update Locality Pipeline"
+		);
 
-        let pipeline_update_density = create_compute_helper(
-            device, layouts, &shader, 
-            "UpdateDensityCompute", "Update Density Pipeline"
-        );
+		let pipeline_update_density = create_compute_helper(
+			device, layouts, &shader, 
+			"UpdateDensityCompute", "Update Density Pipeline"
+		);
 
-        let pipeline_apply_pressure = create_compute_helper(
-            device, layouts, &shader, 
-            "ApplyPressureForceCompute", "Apply Pressure Pipeline"
-        );
+		let pipeline_apply_pressure = create_compute_helper(
+			device, layouts, &shader, 
+			"ApplyPressureForceCompute", "Apply Pressure Pipeline"
+		);
 
-        let pipeline_apply_viscosity = create_compute_helper(
-            device, layouts, &shader, 
-            "ApplyViscosityForceCompute", "Apply Viscosity Pipeline"
-        );
+		let pipeline_apply_viscosity = create_compute_helper(
+			device, layouts, &shader, 
+			"ApplyViscosityForceCompute", "Apply Viscosity Pipeline"
+		);
 
 		//			Rendering
-        //	Create vertex buffer
+		//	Create vertex buffer
 		let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
 			label: Some("Vertex Buffer"),
 			size: position_buffer.size() as wgpu::BufferAddress * std::mem::size_of::<nalgebra::Vector2<f32>>() as wgpu::BufferAddress,
@@ -350,39 +350,39 @@ impl FluidSimulation {
 		});
 
 		//	Create render pipeline for particle rendering
-        let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            layout: Some(&render_layout),
-            vertex: wgpu::VertexState {
-                module: &render_shader,
-                entry_point: "main_vertex",
-                buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<nalgebra::Vector2<f32>>() as wgpu::BufferAddress,
-                    step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![
-                        0 => Float32x2, // Assuming your position data is a 2D vector
-                    ],
-                }],
-            },
-            fragment: Some(wgpu::FragmentState {
-                module: &render_shader,
-                entry_point: "main_fragment",
-                targets: &[Some( wgpu::ColorTargetState {
-                    format: wgpu::TextureFormat::Bgra8UnormSrgb,
-                    blend: Some(wgpu::BlendState::REPLACE), // Adjust blend state as needed
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
+		let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+			layout: Some(&render_layout),
+			vertex: wgpu::VertexState {
+				module: &render_shader,
+				entry_point: "main_vertex",
+				buffers: &[wgpu::VertexBufferLayout {
+					array_stride: std::mem::size_of::<nalgebra::Vector2<f32>>() as wgpu::BufferAddress,
+					step_mode: wgpu::VertexStepMode::Vertex,
+					attributes: &wgpu::vertex_attr_array![
+						0 => Float32x2, // Assuming your position data is a 2D vector
+					],
+				}],
+			},
+			fragment: Some(wgpu::FragmentState {
+				module: &render_shader,
+				entry_point: "main_fragment",
+				targets: &[Some( wgpu::ColorTargetState {
+					format: wgpu::TextureFormat::Bgra8UnormSrgb,
+					blend: Some(wgpu::BlendState::REPLACE), // Adjust blend state as needed
+					write_mask: wgpu::ColorWrites::ALL,
+				})],
+			}),
 			
 			primitive: wgpu::PrimitiveState {
-                topology: wgpu::PrimitiveTopology::PointList,
-                strip_index_format: None,
-                front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
-                polygon_mode: wgpu::PolygonMode::Fill,
+				topology: wgpu::PrimitiveTopology::PointList,
+				strip_index_format: None,
+				front_face: wgpu::FrontFace::Ccw,
+				cull_mode: Some(wgpu::Face::Back),
+				polygon_mode: wgpu::PolygonMode::Fill,
 
-                unclipped_depth: false,
-                conservative: false,
-            },
+				unclipped_depth: false,
+				conservative: false,
+			},
 			
 			depth_stencil: None, // 1.
 			multisample: wgpu::MultisampleState {
@@ -393,59 +393,59 @@ impl FluidSimulation {
 			multiview: None, // 5.
 
 			label: None,
-        });
+		});
 
 		//	Create object
 		Self {
-            num_particles: 1000 as u32,
+			num_particles: 1000 as u32,
 			
 			//		Simulation data
-            //	Buffers
+			//	Buffers
 			position_buffer,
-            velocity_buffer,
+			velocity_buffer,
 
-            predicted_pos_buffer,
-            density_buffer,
+			predicted_pos_buffer,
+			density_buffer,
 
-            local_indices_buffer,
-            local_offsets_buffer,
+			local_indices_buffer,
+			local_offsets_buffer,
 
 			//	Pipelines
 			pipeline_update_pos,
 
-    		pipeline_external_forces,
-    		pipeline_predict_pos,
+			pipeline_external_forces,
+			pipeline_predict_pos,
 
-    		pipeline_update_locality,
-    		pipeline_update_density,
+			pipeline_update_locality,
+			pipeline_update_density,
 
    			pipeline_apply_pressure,
-    		pipeline_apply_viscosity,
+			pipeline_apply_viscosity,
 
 			//	Bind Groups
 			buffers_bind_group,
 			settings_bind_group,
 
 			//	Other
-            settings,
+			settings,
 
 			//		Render data
 			vertex_buffer,
 
 			particle_render_shader: render_shader,
 			particle_render_pipeline: render_pipeline,
-        }
-    }
+		}
+	}
 
 	//		Compute stuff
 	pub fn compute(
-        &mut self,
-        encoder: &mut wgpu::CommandEncoder
-    ) {
+		&mut self,
+		encoder: &mut wgpu::CommandEncoder
+	) {
 		let dispatch_size: u32 = (self.settings.max_particles / 64) as u32;
 
 		//		Compute steps
-        //	Update particle positions. This is the first thing we do.
+		//	Update particle positions. This is the first thing we do.
 		self.run_compute_pass(encoder, &self.pipeline_update_pos, dispatch_size);
 
 		//	Apply external forces to the particles.
@@ -476,7 +476,7 @@ impl FluidSimulation {
 		{
 			let mut cpass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor { 
 				label: None, //Some("") 
-                timestamp_writes: None,
+				timestamp_writes: None,
 			});
 			cpass.set_pipeline(&pipeline);
 			cpass.set_bind_group(0, &self.buffers_bind_group, &[]);
@@ -498,34 +498,34 @@ impl FluidSimulation {
 
 	//		Render stuff
 	//	This function does a single render pass.
-    pub fn render_particles(
-        &self, 
-        encoder: &mut wgpu::CommandEncoder, 
-        view: &wgpu::TextureView
-    ) {{
-        let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-            label: Some("Render Pass"),
-            color_attachments: &[Some( wgpu::RenderPassColorAttachment {
-                view,
-                resolve_target: None,
-                ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
-                    store: wgpu::StoreOp::Store,
-                },
-            })],
-            depth_stencil_attachment: None,
-            occlusion_query_set: None,
-            timestamp_writes: None,
-        });
+	pub fn render_particles(
+		&self, 
+		encoder: &mut wgpu::CommandEncoder, 
+		view: &wgpu::TextureView
+	) {{
+		let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+			label: Some("Render Pass"),
+			color_attachments: &[Some( wgpu::RenderPassColorAttachment {
+				view,
+				resolve_target: None,
+				ops: wgpu::Operations {
+					load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+					store: wgpu::StoreOp::Store,
+				},
+			})],
+			depth_stencil_attachment: None,
+			occlusion_query_set: None,
+			timestamp_writes: None,
+		});
 
-        // Set pipeline and bind groups
-        render_pass.set_pipeline(&self.particle_render_pipeline);
-        render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); //self.num_particles as u64
-        render_pass.set_bind_group(0, &self.buffers_bind_group, &[]);
-        render_pass.set_bind_group(1, &self.settings_bind_group, &[]);
+		// Set pipeline and bind groups
+		render_pass.set_pipeline(&self.particle_render_pipeline);
+		render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); //self.num_particles as u64
+		render_pass.set_bind_group(0, &self.buffers_bind_group, &[]);
+		render_pass.set_bind_group(1, &self.settings_bind_group, &[]);
 
-        // Draw particles
-        render_pass.draw(0..self.num_particles, 0..1);
+		// Draw particles
+		render_pass.draw(0..self.num_particles, 0..1);
 	}}
 }
 
@@ -534,47 +534,47 @@ impl FluidSimulation {
 fn create_buffer<T: bytemuck::Pod>(
 	device: &wgpu::Device, 
 	data: &[T],
-    label: &str
+	label: &str
 ) -> wgpu::Buffer {
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents: bytemuck::cast_slice(data),
-        usage: wgpu::BufferUsages::STORAGE 
+	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some(label),
+		contents: bytemuck::cast_slice(data),
+		usage: wgpu::BufferUsages::STORAGE 
 			| wgpu::BufferUsages::COPY_DST,
-    })
+	})
 }
 
 fn create_buffer_zeros<T: bytemuck::Pod + bytemuck::Zeroable + Clone>(
-    device: &wgpu::Device,
-    count: usize,
-    label: &str,
+	device: &wgpu::Device,
+	count: usize,
+	label: &str,
 ) -> wgpu::Buffer {
-    let zeroed_data: Vec<T> = vec![T::zeroed(); count];
+	let zeroed_data: Vec<T> = vec![T::zeroed(); count];
 
-    device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some(label),
-        contents: bytemuck::cast_slice(&zeroed_data),
-        usage: wgpu::BufferUsages::STORAGE
+	device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+		label: Some(label),
+		contents: bytemuck::cast_slice(&zeroed_data),
+		usage: wgpu::BufferUsages::STORAGE
 			| wgpu::BufferUsages::COPY_DST,
-    })
+	})
 }
 
 //	Compute pipeline function
 fn create_compute_helper(
-    device: &wgpu::Device,
+	device: &wgpu::Device,
 	layouts: &[&wgpu::BindGroupLayout],
-    module: &wgpu::ShaderModule,
-    entry_point: &str,
-    label: &str,
+	module: &wgpu::ShaderModule,
+	entry_point: &str,
+	label: &str,
 ) -> wgpu::ComputePipeline {
 	device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-        label: Some(label),
-        layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-            label: Some(label),
-            bind_group_layouts: layouts,
-            push_constant_ranges: &[],
-        })),
-        module: &module,
-        entry_point: entry_point,
-    })
+		label: Some(label),
+		layout: Some(&device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+			label: Some(label),
+			bind_group_layouts: layouts,
+			push_constant_ranges: &[],
+		})),
+		module: &module,
+		entry_point: entry_point,
+	})
 }

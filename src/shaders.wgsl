@@ -28,16 +28,16 @@ struct SimulationSettings {
 
 	smoothing_radius: f32,
 	target_density: f32,
-    
+	
 	pressure_multiplier: f32,
-    pressure_multiplier_near: f32,
+	pressure_multiplier_near: f32,
 
-    viscosity_strength: f32,
+	viscosity_strength: f32,
 
 	//		Bounds & obstacles
 	bounds_size: vec2<f32>,
-    obstacle_size: vec2<f32>,
-    obstacle_pos: vec2<f32>,
+	obstacle_size: vec2<f32>,
+	obstacle_pos: vec2<f32>,
 
 	collision_damping: f32,
 }
@@ -79,54 +79,54 @@ var<private> OFFSETS_2D: array<vec2<i32>, 9> = array<vec2<i32>, 9>(
 fn UpdatePositionsCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >=  settings.num_particles) {
-        return;
-    }
+	if (id.x >=  settings.num_particles) {
+		return;
+	}
 
-    positions[id.x] += velocities[id.x] *  settings.dT;
-    HandleCollisions(id.x);
+	positions[id.x] += velocities[id.x] *  settings.dT;
+	HandleCollisions(id.x);
 }
 
 fn HandleCollisions(
 	i: u32,
 ) {
 	//	Slice buffer data
-    var pos = positions[i];
-    var vel = velocities[i];
+	var pos = positions[i];
+	var vel = velocities[i];
 
-    //	Collide against bounds
-    let bounds_half: vec2<f32> =  settings.bounds_size * 0.5;
-    let bounds_dist: vec2<f32> = bounds_half - abs(pos);
+	//	Collide against bounds
+	let bounds_half: vec2<f32> =  settings.bounds_size * 0.5;
+	let bounds_dist: vec2<f32> = bounds_half - abs(pos);
 
-    for (var axis: i32 = 0; axis < 2; axis = axis + 1) {
-        if (bounds_dist[axis] <= 0.0) {
-            pos[axis] = bounds_half[axis] * sign(pos[axis]);
-            vel[axis] *= -1.0 *  settings.collision_damping;
-        }
-    }
+	for (var axis: i32 = 0; axis < 2; axis = axis + 1) {
+		if (bounds_dist[axis] <= 0.0) {
+			pos[axis] = bounds_half[axis] * sign(pos[axis]);
+			vel[axis] *= -1.0 *  settings.collision_damping;
+		}
+	}
 
-    //	Collide against obstacle
-    let obstacle_half =  settings.obstacle_size * 0.5;
-    let obstacle_dist = obstacle_half - abs(pos -  settings.obstacle_pos);
+	//	Collide against obstacle
+	let obstacle_half =  settings.obstacle_size * 0.5;
+	let obstacle_dist = obstacle_half - abs(pos -  settings.obstacle_pos);
 
-    if obstacle_dist.x >= 0. && obstacle_dist.y >= 0. {
-        //	Match doesn't exist in wgsl & I can't slice vectors
-        if obstacle_dist.x < obstacle_dist.y {
+	if obstacle_dist.x >= 0. && obstacle_dist.y >= 0. {
+		//	Match doesn't exist in wgsl & I can't slice vectors
+		if obstacle_dist.x < obstacle_dist.y {
 			let offset: f32 = settings.obstacle_pos.x;
 
 			pos.x = obstacle_half.x * sign(pos.x - offset) + offset;
-        	vel.x *= -1. *  settings.collision_damping;
+			vel.x *= -1. *  settings.collision_damping;
 		} else if obstacle_dist.x >= obstacle_dist.y {
 			let offset: f32 = settings.obstacle_pos.y;
 
 			pos.y = obstacle_half.y * sign(pos.y - offset) + offset;
-        	vel.y *= -1. *  settings.collision_damping;
+			vel.y *= -1. *  settings.collision_damping;
 		}
-    }
+	}
 
-    //	Now update pos & vel
-    positions[i] = pos;
-    velocities[i] = vel;
+	//	Now update pos & vel
+	positions[i] = pos;
+	velocities[i] = vel;
 }
 
 //	External force handling
@@ -134,16 +134,16 @@ fn HandleCollisions(
 fn ApplyExternalForcesCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >=  settings.num_particles) {
-        return;
-    }
+	if (id.x >=  settings.num_particles) {
+		return;
+	}
 
 	//	Slice data
 	let pos: vec2<f32> = positions[id.x];
 	var vel: vec2<f32> = velocities[id.x];
 
 	//	Apply gravity
-    let accel_gravity: vec2<f32> = vec2<f32>(0.0, settings.gravity);
+	let accel_gravity: vec2<f32> = vec2<f32>(0.0, settings.gravity);
 	vel += accel_gravity * settings.dT;
 
 	//	Update velocity
@@ -155,16 +155,16 @@ fn ApplyExternalForcesCompute(
 fn UpdatePredictedPosCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >=  settings.num_particles) {
-        return;
-    }
+	if (id.x >=  settings.num_particles) {
+		return;
+	}
 
 	//	Slice data
 	let pos: vec2<f32> = positions[id.x];
 	let vel: vec2<f32> = velocities[id.x];
 
-    //	Predict
-    predictedPos[id.x] = positions[id.x] + velocities[id.x] *  settings.prediction_factor;
+	//	Predict
+	predictedPos[id.x] = positions[id.x] + velocities[id.x] *  settings.prediction_factor;
 }
 
 
@@ -173,41 +173,41 @@ fn UpdatePredictedPosCompute(
 fn UpdateLocalHashCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >= settings.num_particles) {
-        return;
-    }
+	if (id.x >= settings.num_particles) {
+		return;
+	}
 
-    //	Reset offsets
-    localOffsets[id.x] = settings.num_particles;
+	//	Reset offsets
+	localOffsets[id.x] = settings.num_particles;
 
-    //	Update index buffer
-    let indices: vec2<i32> = Pos2Indices(predictedPos[id.x], settings.smoothing_radius);
-    let hash: u32 = Indices2Hash(indices);
-    let key: u32 = hash % settings.max_particles;
-    
+	//	Update index buffer
+	let indices: vec2<i32> = Pos2Indices(predictedPos[id.x], settings.smoothing_radius);
+	let hash: u32 = Indices2Hash(indices);
+	let key: u32 = hash % settings.max_particles;
+	
 	localIndices[id.x] = vec3<u32>(id.x, hash, key);
 }
 
 //Position to integer coordinates
 fn Pos2Indices(position: vec2<f32>, radius: f32) -> vec2<i32> {
-    return vec2<i32>(position / radius);
+	return vec2<i32>(position / radius);
 }
 
 //Integer coordinates to hash value
 fn Indices2Hash(indices: vec2<i32>) -> u32 {
-    let bitshift: u32 = u32(32 / 2);
+	let bitshift: u32 = u32(32 / 2);
 
-    // Map indices to u32
-    let indices_unsigned = vec2<u32>(indices);
+	// Map indices to u32
+	let indices_unsigned = vec2<u32>(indices);
 
-    // Hash
-    var hash: u32 = 0;
-    for (var i: u32 = 0; i < 3; i = i + 1) {
-        let shifted: u32 = indices_unsigned[i] << (i * bitshift);
-        hash = hash ^ (shifted * HASH_KEYS[i]);
-    }
+	// Hash
+	var hash: u32 = 0;
+	for (var i: u32 = 0; i < 3; i = i + 1) {
+		let shifted: u32 = indices_unsigned[i] << (i * bitshift);
+		hash = hash ^ (shifted * HASH_KEYS[i]);
+	}
 
-    return hash;
+	return hash;
 }
 
 //	Density computation
@@ -215,11 +215,11 @@ fn Indices2Hash(indices: vec2<i32>) -> u32 {
 fn UpdateDensityCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >= settings.num_particles) {
-        return;
-    }
+	if (id.x >= settings.num_particles) {
+		return;
+	}
 
-    densities[id.x] = CalculateDensity(id.x);
+	densities[id.x] = CalculateDensity(id.x);
 }
 
 fn CalculateDensity(
@@ -284,11 +284,11 @@ fn CalculateDensity(
 fn ApplyPressureForceCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >= settings.num_particles) {
-        return;
-    }
+	if (id.x >= settings.num_particles) {
+		return;
+	}
 
-    velocities[id.x] += CalculatePressure(id.x);
+	velocities[id.x] += CalculatePressure(id.x);
 }
  
 //	Note that the force component from pressure is directly proportional to the
@@ -419,11 +419,11 @@ fn CalculatePressure(
 fn ApplyViscosityForceCompute(
 	@builtin(global_invocation_id) id: vec3<u32>
 ) {
-    if (id.x >= settings.num_particles) {
-        return;
-    }
+	if (id.x >= settings.num_particles) {
+		return;
+	}
 
-    velocities[id.x] += CalculateViscosity(id.x);
+	velocities[id.x] += CalculateViscosity(id.x);
 }
 
 
